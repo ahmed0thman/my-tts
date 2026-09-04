@@ -38,3 +38,27 @@ storage/audio/*
 !storage/audio/.gitkeep
 storage/voice-samples/*
 !storage/voice-samples/.gitkeep
+
+# Media files
+# Audio
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.aac
+*.m4a
+
+# Video
+*.mp4
+*.mkv
+*.webm
+*.avi
+*.mov
+
+# Images
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.svg
