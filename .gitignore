@@ -41,12 +41,12 @@ storage/voice-samples/*
 
 # Media files
 # Audio
-*.mp3
-*.wav
-*.ogg
-*.flac
-*.aac
-*.m4a
+**/*.mp3
+**/*.wav
+**/*.ogg
+**/*.flac
+**/*.aac
+**/*.m4a
 
 # Video
 *.mp4
