@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model VoiceProfile {
+  id                 String       @id @default(cuid())
+  name               String
+  description        String?  
+  referenceAudioPath String
+  referenceText      String       @default("")  // transcription of the reference clip — SILMA requires it to clone; empty means "needs filling in"
+  duration           Float        // duration of reference audio in seconds
+  isDefault          Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  generations        Generation[]
+}
+
+enum GenerationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Generation {
+  id              String           @id @default(cuid())
+  text            String
+  audioPath       String?
+  savedPath       String?          // absolute path of the exported copy, when a custom save folder is used
+  modelId         String           @default("silma")  // which engine rendered this (see tts-engine/model_registry.py)
+  params          Json?            // the generation parameters actually used; names differ per model
+  voiceProfileId  String?
+  voiceProfile    VoiceProfile?    @relation(fields: [voiceProfileId], references: [id], onDelete: SetNull)
+  // Legacy SILMA columns, kept so existing history keeps its detail. New rows
+  // record their parameters in `params` instead, since each model has its own set.
+  speed           Float            @default(1.0)
+  cfgStrength     Float            @default(2.0)
+  nfeStep         Int              @default(16)
+  seed            String?                         // echoed back by the engine so a take can be reproduced (0..4294967295 overflows Int32, and BigInt will not JSON-serialize)
+  duration        Float?           // duration of generated audio
+  fileSize        Int?             // file size in bytes
+  status          GenerationStatus @default(PENDING)
+  error           String?
+  createdAt       DateTime         @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([voiceProfileId])
+  @@index([status])
+}
+
+model Preset {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String?
+  modelId         String   @default("silma")  // presets are model-specific: the parameters do not transfer
+  params          Json?
+  // Legacy SILMA columns, kept for presets saved before multi-model support.
+  speed           Float    @default(1.0)
+  cfgStrength     Float    @default(2.0)
+  nfeStep         Int      @default(16)
+  voiceProfileId  String?
+  createdAt       DateTime @default(now())
+}

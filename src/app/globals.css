@@ -1,0 +1,268 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+@source "../**/*.{ts,tsx}";
+
+/* ------------------------------------------------------------------ *
+ * NAMAA Studio — design tokens
+ * Warm charcoal "studio rack" base + a single gold accent. Emerald is
+ * reserved for live/engine status, red for destructive. No other hues.
+ * ------------------------------------------------------------------ */
+
+@theme {
+  --font-sans: 'Cairo', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-elevated: var(--elevated);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.5rem;
+
+  --shadow-plate: 0 1px 2px -1px rgb(0 0 0 / 0.10), 0 2px 8px -2px rgb(0 0 0 / 0.08);
+  --shadow-lift: 0 4px 12px -4px rgb(0 0 0 / 0.16), 0 12px 32px -12px rgb(0 0 0 / 0.20);
+  --shadow-float: 0 8px 24px -8px rgb(0 0 0 / 0.28), 0 24px 64px -24px rgb(0 0 0 / 0.32);
+
+  --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Light — warm paper, not clinical white */
+:root {
+  --background: #f7f5f1;
+  --foreground: #191713;
+  --card: #ffffff;
+  --card-foreground: #191713;
+  --elevated: #fdfcfa;
+  --popover: #ffffff;
+  --popover-foreground: #191713;
+
+  --primary: #a8741a;
+  --primary-foreground: #fffdf7;
+
+  --secondary: #edeae3;
+  --secondary-foreground: #2b2620;
+  --muted: #f0ede6;
+  --muted-foreground: #6b6459;
+  --accent: #f3efe6;
+  --accent-foreground: #191713;
+
+  --destructive: #c0392b;
+  --destructive-foreground: #fff8f7;
+  --success: #1d7a52;
+  --success-foreground: #f4fffa;
+
+  --border: #e2ddd3;
+  --border-strong: #d1cabc;
+  --input: #ffffff;
+  --ring: #a8741a;
+
+  --radius: 0.875rem;
+  color-scheme: light;
+}
+
+/* Dark — the default. Warm off-black studio rack. */
+.dark {
+  --background: #0c0b0a;
+  --foreground: #f4f1ec;
+  --card: #161513;
+  --card-foreground: #f4f1ec;
+  --elevated: #1e1c19;
+  --popover: #1a1917;
+  --popover-foreground: #f4f1ec;
+
+  --primary: #e5ab48;
+  --primary-foreground: #1a1206;
+
+  --secondary: #24211d;
+  --secondary-foreground: #f4f1ec;
+  --muted: #1c1a17;
+  --muted-foreground: #a39c91;
+  --accent: #26231f;
+  --accent-foreground: #f4f1ec;
+
+  --destructive: #e8604a;
+  --destructive-foreground: #1a0d0a;
+  --success: #3fc98a;
+  --success-foreground: #04160e;
+
+  --border: #29251f;
+  --border-strong: #3a352d;
+  --input: #1a1916;
+  --ring: #e5ab48;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One consistent focus treatment everywhere. Never removed. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--primary) 30%, transparent);
+    color: var(--foreground);
+  }
+
+  /* Arabic headings want slightly looser leading than Latin defaults */
+  h1, h2, h3, h4 {
+    line-height: 1.35;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Scrollbars: part of the furniture, not an afterthought */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  /* Technical readouts: numbers, units, paths, endpoints.
+     Always LTR + tabular so digits never reflow or reorder in RTL. */
+  .numeric {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Isolates a mixed Arabic/Latin fragment so brackets and units
+     don't jump to the wrong side of the string. */
+  .bidi-isolate {
+    unicode-bidi: isolate;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Shared page container — the single source of layout width. */
+  .page-shell {
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+  }
+
+  .page-shell-wide {
+    width: 100%;
+    max-width: 1440px;
+    margin-inline: auto;
+  }
+
+  /* Hairline grain over the app background: gives the dark surfaces
+     depth without a single extra DOM repaint on scroll. */
+  .studio-grain::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.55;
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      color-mix(in srgb, var(--foreground) 7%, transparent) 1px,
+      transparent 0
+    );
+    background-size: 4px 4px;
+  }
+}
+
+@keyframes namaa-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise {
+  animation: namaa-rise 0.4s var(--ease-out-quint) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

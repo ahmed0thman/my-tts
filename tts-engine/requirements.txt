@@ -1,0 +1,77 @@
+# ============================================================
+# TTS engine dependencies — SILMA + Chatterbox (NAMAA dialects)
+#
+# The control board runs three models across two unrelated runtimes:
+#   silma          silma-ai/silma-tts            (F5-TTS, Fusha/MSA)
+#   namaa-saudi    NAMAA-Space/NAMAA-Saudi-TTS   (Chatterbox, Saudi Najdi)
+#   namaa-egyptian NAMAA-Space/NAMAA-Egyptian-TTS(Chatterbox, Egyptian)
+#
+# They coexist in one venv only at torch 2.6.0 / transformers 5.2.0, which is
+# what chatterbox-tts hard-pins. SILMA itself only needs torch>=2.0, and 2.6 is
+# also below the torchaudio 2.9 cutover to torchcodec (see note 3).
+#
+# NOTE: `pip install silma-tts` DOES NOT WORK on macOS as published.
+# Two of its dependencies are Linux/CUDA-only, so the install is staged.
+# ./scripts/setup.sh does all of this for you — see it for the exact order.
+#
+#   1. catt-tashkeel pins onnxruntime-gpu, which has NO macOS wheels (CUDA only).
+#      The CPU `onnxruntime` package provides the same `onnxruntime` import,
+#      so install catt-tashkeel with --no-deps alongside plain onnxruntime.
+#   2. nemo_text_processing pins pynini==2.1.6.post1, which has no macOS wheels
+#      and does not compile against OpenFst 1.8.4. pynini 2.1.7 does, so install
+#      nemo_text_processing with --no-deps and pynini 2.1.7 separately.
+#      Requires `brew install openfst` first.
+#   3. torch/torchaudio are pinned to 2.6.x. From torchaudio 2.9 `load()`
+#      delegates to torchcodec, which needs FFmpeg <= 7 while Homebrew now
+#      ships FFmpeg 9 — pinning avoids that whole coupling.
+#   4. Python 3.11 is required: silma-tts pins numpy<=1.26.4, which has no
+#      cp313 wheels and will not build on 3.13.
+# ============================================================
+
+# --- Web layer ---
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic>=2.0
+aiofiles
+
+# --- ML runtime ---
+# Pinned by chatterbox-tts; also keeps us clear of torchcodec (note 3).
+torch==2.6.0
+torchaudio==2.6.0
+transformers==5.2.0
+
+# --- NAMAA dialect models (Chatterbox runtime) ---
+chatterbox-tts
+# perth (chatterbox's watermarker) imports pkg_resources, removed in setuptools 81+
+setuptools<81
+
+# --- SILMA runtime deps (silma-tts itself is installed with --no-deps) ---
+cached_path
+huggingface_hub
+hydra-core>=1.3.0
+librosa
+matplotlib
+numpy<=1.26.4
+omegaconf
+pydub
+soundfile
+torchdiffeq
+tqdm>=4.65.0
+vocos
+x_transformers>=1.31.14
+
+# --- Arabic diacritization (see note 1) ---
+onnxruntime
+
+# --- Text normalization deps (nemo_text_processing installed with --no-deps; see note 2) ---
+cdifflib
+editdistance
+inflect
+joblib
+pandas
+regex
+sacremoses>=0.0.43
+setuptools>=65.5.1
+wget
+wrapt

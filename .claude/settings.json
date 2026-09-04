@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/partial-claude-settings.json",
+  "version": "2026-09",
+  "project": {
+    "name": "namaa-tts-control-board",
+    "description": "Local control board for NAMAA Egyptian Text-to-Speech & zero-shot voice cloning",
+    "primaryLanguage": "TypeScript",
+    "secondaryLanguage": "Python",
+    "defaultEncoding": "utf-8"
+  },
+  "permissions": {
+    "allowTerminalCommands": [
+      "npm run *",
+      "npx prisma *",
+      "npx tsc *",
+      "./scripts/*",
+      "python3 *",
+      "docker compose *"
+    ],
+    "denyTerminalCommands": [
+      "rm -rf /",
+      "rm -rf ~",
+      "git reset --hard",
+      "git push --force"
+    ]
+  },
+  "environment": {
+    "nodeVersion": ">=24.0.0",
+    "pythonVersion": ">=3.10.0",
+    "defaultPorts": {
+      "web": 3000,
+      "engine": 8000,
+      "database": 5440
+    }
+  },
+  "conventions": {
+    "preferTypeScriptStrict": true,
+    "preferServerActions": true,
+    "preferReactQuery": true,
+    "preferTailwindV4": true
+  }
+}
