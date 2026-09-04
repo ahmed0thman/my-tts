@@ -1,138 +1,146 @@
 # Project State & Technical Inventory
 
-**Last Updated**: September 2026  
-**Status**: Production-Ready / All Builds & Typechecks Passing (0 Errors)
+**Last Updated**: 2026-09-04
+**Status**: Working — three models generating and switching; typecheck and Python compile clean.
 
 ---
 
 ## 1. Executive Summary
-The project is a local Text-to-Speech and Zero-Shot Voice Cloning control board for Arabic using [silma-ai/silma-tts](https://huggingface.co/silma-ai/silma-tts) (F5-TTS/DiT, 150M, MSA + English). The interface is Egyptian Arabic; the synthesized accent is Fusha. It pairs a Next.js 15 full-stack frontend application with a dedicated Python FastAPI inference sidecar that leverages Apple Silicon Metal Performance Shaders (MPS) on MacBook M1 Pro hardware.
+A local text-to-speech and zero-shot voice-cloning control board for Arabic that
+runs **three switchable models** behind one interface. A Next.js 15 full-stack
+app talks over HTTP to a Python FastAPI inference sidecar that loads exactly one
+model at a time onto Apple Silicon MPS.
+
+| id | Repo | Dialect | Runtime | Parameters |
+|---|---|---|---|---|
+| `silma` (default) | `silma-ai/silma-tts` | فصحى / MSA | F5-TTS / DiT, 150M | `speed`, `cfgStrength`, `nfeStep` (+ `seed`) |
+| `namaa-saudi` | `NAMAA-Space/NAMAA-Saudi-TTS` | سعودي / نجدي | Chatterbox Multilingual fine-tune | `exaggeration`, `cfgWeight`, `temperature` |
+| `namaa-egyptian` | `NAMAA-Space/NAMAA-Egyptian-TTS` | مصري | Chatterbox Multilingual fine-tune | `exaggeration`, `cfgWeight`, `temperature` |
+
+The interface language is Egyptian Arabic throughout, regardless of which
+dialect the selected model speaks.
 
 ---
 
 ## 2. Current Operational State
 
-| Check | Tool / Command | Status | Notes |
-| :--- | :--- | :--- | :--- |
-| **Type Check** | `npx tsc --noEmit` | **PASS (0 errors)** | Full TypeScript strictness |
-| **Next.js Build** | `npm run build` | **PASS** | 8/8 routes successfully compiled |
-| **Prisma Generation** | `npx prisma generate` | **PASS** | Prisma Client v6.19.3 |
-| **Python Syntax** | `python3 -m py_compile` | **PASS** | `audio_utils.py`, `model_manager.py`, `main.py` |
-| **Node Compatibility** | Node.js v24.16.0 | **PASS** | Active LTS |
-| **Hardware Target** | Apple Silicon M1 Pro | **CONFIGURED** | MPS acceleration with CPU fallback |
+| Check | Command | Status |
+| :--- | :--- | :--- |
+| **Type Check** | `npx tsc --noEmit` | **PASS (0 errors)** |
+| **Python Syntax** | `venv/bin/python -m py_compile tts-engine/*.py tts-engine/engines/*.py` | **PASS** |
+| **Shell Scripts** | `bash -n scripts/setup.sh scripts/dev.sh` | **PASS** |
+| **Prisma Client** | `npx prisma generate` | **PASS** — v6.19.3 |
+| **Engine** | `GET /api/health` | **ok** — `device: mps`, `sample_rate: 24000` |
+| **Registry** | `GET /api/models` | **3 models**, `default: silma` |
+| **Node** | v24.16.0 / npm 11.13.0 | **PASS** |
+
+### Measured behaviour
+- Cold load: SILMA ~13 s · NAMAA ~37 s · NAMAA→NAMAA dialect swap ~19 s via `adopt()`.
+- Resident memory holds at ~0.9 GB RSS across a full switch cycle — `unload()` works.
+- Saudi vs Egyptian checkpoints: **291 of 292 tensors differ**; the dialect swap is real.
+- Database currently holds 22 generations, 1 voice profile, and 14 presets (across all three models).
 
 ---
 
-## 3. Technology Stack & Versions
+## 3. Technology Stack & Versions (as installed)
 
-- **Runtime**: Node.js v24 (Active LTS) & Python 3.10+
-- **Frontend Framework**: Next.js 15.5+ (App Router)
-- **UI Framework**: React 19
-- **CSS / Styling**: Tailwind CSS v4.3+ (CSS-first config)
-- **Component Primitives**: Radix UI / Shadcn UI (19 components)
-- **Icons**: Hugeicons (`@hugeicons/react` & `@hugeicons/core-free-icons`) and Lucide React
-- **State Management**: TanStack React Query v5.102+
-- **Form Management**: React Hook Form v7.87+ with `@hookform/resolvers/zod`
-- **Validation**: Zod v3.24+
-- **Database Engine**: PostgreSQL 18 Alpine (Docker containerized)
-- **Database ORM**: Prisma v6.19+
-- **ML Framework**: PyTorch / torchaudio with MPS backend
-- **TTS Engine**: SILMA TTS (F5-TTS/DiT, 150M, MSA + English) with CATT diacritization and NeMo normalization
-- **Audio Serving**: Next.js custom stream handler with Range header support
+- **Runtime**: Node.js v24.16.0 · Python **3.11.15** (`tts-engine/venv`, provisioned by `uv`)
+- **Frontend**: Next.js 15.5.25 (App Router) · React 19.2.8 · TypeScript 5.9.3 (strict)
+- **Styling**: Tailwind CSS v4.3.3 (CSS-first config) · Radix/Shadcn (19 UI components) · Hugeicons + Lucide
+- **Data**: TanStack React Query 5.102.8 · React Hook Form 7.87.0 · Zod 3.25.76
+- **Database**: **PostgreSQL 17 Alpine** (Docker, host port 5440) · Prisma 6.19.3
+- **ML**: torch **2.6.0** · torchaudio **2.6.0** · transformers **5.2.0** · numpy 1.26.4 · MPS backend
+  - These are the versions `chatterbox-tts` hard-pins, and the only set where both runtimes coexist. 2.6 also stays below the torchaudio 2.9 cutover to `torchcodec` (which needs FFmpeg ≤ 7, while Homebrew ships 9).
+- **Audio serving**: Next.js route handler with Range support and stream-cancel handling
+- **Audio**: wavesurfer.js 7.12.11
+
+> **Note**: docs previously claimed PostgreSQL 18 and torch 2.8. Both were wrong;
+> the table above reflects what is actually installed and running.
 
 ---
 
-## 4. Complete File Inventory
+## 4. File Inventory
 
 ### Configuration & Automation
-- `package.json`: Dependency manifests with modern 2026 versions and Node 24 engine lock.
-- `tsconfig.json`: Strict TypeScript compiler options with `@/*` path mapping.
-- `next.config.ts`: Next.js 15 configuration with standalone output readiness.
-- `postcss.config.mjs`: PostCSS plugin configuration for `@tailwindcss/postcss`.
-- `docker-compose.yml`: PostgreSQL 18 Alpine service configuration with persistent volumes and health checks.
-- `.env.example` & `.env`: Local environment configurations (`DATABASE_URL`, `TTS_ENGINE_URL`, `NEXT_PUBLIC_TTS_ENGINE_URL`, paths).
-- `.gitignore`: Ignoring dependencies, build outputs, and local audio assets.
-- `scripts/setup.sh`: Automated bash setup sequence with version detection and database bootstrap.
-- `scripts/dev.sh`: Process-managed launcher starting Postgres, FastAPI, and Next.js concurrently.
+- `package.json` — Node 24 engine lock; scripts for dev/build/lint and the Prisma helpers.
+- `next.config.ts` — `experimental.serverActions.bodySizeLimit: '12mb'` (reference WAVs travel through a Server Action; the 1 MB default rejects ~20 s of 24 kHz mono).
+- `docker-compose.yml` — `postgres:17-alpine`, host port 5440, volume `namaa_pgdata`, `pg_isready` healthcheck.
+- `.env` / `.env.example` — `DATABASE_URL`, `TTS_ENGINE_URL`, `NEXT_PUBLIC_TTS_ENGINE_URL`, storage paths.
+- `scripts/setup.sh` — prerequisites (Node 24, uv, Homebrew, Docker), Postgres, npm, Prisma, Python 3.11 venv, the staged macOS install, **both** import verifications, storage dirs, ~10 GB weight warm-up with xet disabled.
+- `scripts/dev.sh` — Postgres, FastAPI (venv binaries by **absolute path**, with a `silma_tts` preflight), Next.js; trap-based cleanup.
 
-### Claude Agent Documentation (`.claude/` & `CLAUDE.md`)
-- `CLAUDE.md`: Concise root briefing file (<200 lines) for Claude Code agent sessions.
-- `.claude/settings.json`: Configuration, permissions, and tool guardrails.
-- `.claude/project-state.md`: This comprehensive system inventory document.
-- `.claude/rules/architecture.md`: Sidecar pattern, server action standards, and storage rules.
-- `.claude/rules/frontend.md`: React 19, Tailwind v4, Shadcn, and React Query conventions.
-- `.claude/rules/backend-ml.md`: Python FastAPI, SILMA TTS, and Apple Silicon MPS rules.
-- `.claude/rules/database.md`: PostgreSQL 18, Prisma singleton, and schema rules.
-- `.claude/rules/arabic-i18n.md`: Cairo font, RTL directionality, and Egyptian Arabic terminology.
-- `.claude/commands/setup.md`: Guide for `./scripts/setup.sh`.
-- `.claude/commands/dev.md`: Guide for `./scripts/dev.sh`.
-- `.claude/commands/build.md`: Guide for production build and type checking.
-- `.claude/commands/db.md`: Guide for Prisma migrations, pushes, and Studio.
+### Claude Agent Documentation
+- `CLAUDE.md` — root briefing, incl. the multi-model architecture, the cloning contract, the macOS install rationale, and the known stale spots.
+- `.claude/rules/architecture.md` — sidecar pattern, **model registry as the extension point**, route groups, Server Actions, storage isolation.
+- `.claude/rules/frontend.md` — React/Tailwind/Query conventions, **schema-driven model parameters**, save location, voice recording.
+- `.claude/rules/backend-ml.md` — environment pins, multi-model rules, the per-model contract table, MPS, API standards, output handling.
+- `.claude/rules/database.md` — PostgreSQL 17, Prisma singleton, schema conventions incl. the `params` blob rule.
+- `.claude/rules/arabic-i18n.md` — Cairo, RTL, Egyptian vocabulary, model/dialect labels.
+- `.claude/commands/{setup,dev,build,db}.md` — workflow guides.
+- `.claude/settings.json` — permissions and environment (Node >= 24, Python 3.11, ports 3000/8000/5440).
 
 ### Python TTS Sidecar (`tts-engine/`)
-- `tts-engine/requirements.txt`: Python package requirements (`silma-tts`, `fastapi`, `uvicorn`, `torch==2.8.0`, `torchaudio==2.8.0`) plus the macOS staged-install notes.
-- `tts-engine/main.py`: FastAPI server exposing:
-  - `POST /api/generate`: Synthesizes text with an optional reference clip + its transcription, plus `speed`, `cfg_strength`, `nfe_step` and `seed`.
-  - `POST /api/upload-reference`: Validates and stores 3-30s WAV voice samples.
-  - `GET /api/voices`: Lists stored voice clone samples.
-  - `DELETE /api/voices/{filename}`: Deletes reference audio sample.
-  - `GET /api/health`: Health status, uptime, and MPS device status.
-  - `GET /api/model-info`: Detailed architecture and parameter information.
-- `tts-engine/model_manager.py`: Singleton manager handling thread-safe inference (`asyncio.Lock`) and hardware selection (`mps` vs `cpu`).
-- `tts-engine/audio_utils.py`: Audio validation (WAV format, duration checks, sample rate inspection via `torchaudio`).
+- `requirements.txt` — pins plus the full rationale for the three `--no-deps` installs and the `setuptools<81` pin.
+- `main.py` — FastAPI app. Sets `HF_HUB_DISABLE_XET=1` **before** any HF import. Endpoints:
+  - `POST /api/generate` — `text`, `model_id`, optional `voice_profile_path`, `reference_text`, `output_dir`, and `params` as a JSON string. Validates the model id, enforces `reference_text` only when the model declares `requiresReferenceText`, resolves the save folder before inference, normalizes the peak, writes the canonical copy to `storage/audio/` plus an optional export copy.
+  - `GET /api/models` — every model's capabilities and parameter schema, plus `default` and `active`.
+  - `POST /api/upload-reference` · `GET /api/voices` · `DELETE /api/voices/{filename}`
+  - `GET /api/fs/browse` · `GET /api/fs/validate` — save-folder picker (directories only).
+  - `GET /api/health` (adds `active_model`) · `GET /api/model-info`
+  - Response headers: `X-Audio-Path`, `X-Saved-Path`, `X-Duration`, `X-Sample-Rate`, `X-Peak`, `X-Peak-Normalized`, `X-Seed`, `X-Model-Id`.
+- `model_registry.py` — **the single place a model is registered**: `DEFAULT_MODEL_ID`, `MODEL_IDS`, the Chatterbox variant table, `is_valid()`, `create()`, `describe_all()`.
+- `model_manager.py` — singleton owning the one resident engine. `ensure_loaded()` swaps under an `asyncio.Lock`, trying `ChatterboxEngine.adopt()` before falling back to unload+load; blocking work goes through `run_in_executor`.
+- `engines/base.py` — the `TTSEngine` ABC (`load`, `generate`, `unload`, `describe`).
+- `engines/silma_engine.py` — SILMA adapter. Packaged fallback reference + its transcription, `MAX_REFERENCE_SECONDS = 8.05`, echoes the seed back.
+- `engines/chatterbox_engine.py` — serves **both** NAMAA dialects. Downloads only `t3_mtl23ls_v2.safetensors`; `_apply_t3()` clears the lazily-built `patched_model` before a strict `load_state_dict`; `adopt()` reuses a sibling's loaded base.
+- `audio_utils.py` — filename generation, upload saving, `validate_audio_file` (3–30 s), `get_audio_duration`, `normalize_peak`, `resolve_output_dir`, `list_directories`, `build_shortcuts`.
 
-### Full-Stack Next.js Application (`src/`)
-- **Global Configuration**:
-  - `src/app/globals.css`: Tailwind CSS v4 variables, light/dark color definitions, Cairo font import.
-  - `src/app/layout.tsx`: Root HTML layout setting Arabic `dir="rtl"`, `ThemeProvider`, and `QueryProvider`.
-  - `src/providers/query-provider.tsx`: Client-side React Query Provider configuration.
-- **Route Groups & Pages**:
-  - `src/app/(dashboard)/layout.tsx`: Wraps all pages in `AppShell` with the persistent sidebar navigation.
-  - `src/app/(dashboard)/page.tsx`: Main generation studio with `GenerationForm` and recent results preview.
-  - `src/app/(dashboard)/voices/page.tsx`: Voice cloning management with upload dialog and voice profile cards.
-  - `src/app/(dashboard)/history/page.tsx`: Searchable, filterable generation history with metrics cards.
-  - `src/app/(dashboard)/presets/page.tsx`: Preset management with recommended quick-add styles.
-  - `src/app/(dashboard)/settings/page.tsx`: Engine connection controls, hardware metrics (MPS), and diagnostics.
-  - `src/app/api/audio/[...path]/route.ts`: Streaming API route serving audio files directly from `storage/`.
-- **Server Actions (`src/actions/`)**:
-  - `src/actions/generation.ts`: Handles generation submissions, database status updates, and audio file cleanup.
-  - `src/actions/voice-profiles.ts`: Handles file uploads to the TTS engine and database synchronization.
-  - `src/actions/presets.ts`: Manages creation, updating, and listing of voice presets.
-- **React Query Hooks (`src/hooks/`)**:
-  - `src/hooks/use-generations.ts`: Queries and mutations for generation history.
-  - `src/hooks/use-voice-profiles.ts`: Queries and mutations for voice profiles.
-  - `src/hooks/use-presets.ts`: Queries and mutations for voice parameter presets.
-  - `src/hooks/use-engine-status.ts`: 10-second polling query for engine connection health.
-- **UI Components (`src/components/`)**:
-  - `src/components/studio/studio-telemetry.tsx`: Live Apple Silicon M1 Pro MPS telemetry, 24kHz HiFi-GAN badge, and studio mode switcher.
-  - `src/components/generation/master-audio-dock.tsx`: Floating frosted-glass master audio dock with interactive scrubber, speed chips, and lossless export.
-  - `src/components/generation/text-input.tsx`: Arabic RTL text input area with 5 Egyptian Persona cards, word/syllable counters, and speech duration estimation.
-  - `src/components/generation/voice-controls.tsx`: Sliders with dynamic real-time acoustic equalizer visualizer, emotion/pacing badges, inline voice audition, and Hugeicons.
-  - `src/components/generation/audio-player.tsx`: Studio audio player with playback speed toggles (1x-2x), restart, copy link, and lossless WAV download.
-  - `src/components/generation/generation-form.tsx`: Primary form supporting single generation, multi-line batch mode, keyboard shortcuts (Cmd+Enter), and neural pipeline tracking.
-  - `src/components/tour/onboarding-tour.tsx`: Interactive first-time launch onboarding tour with dynamic spotlight element highlighting and keyboard navigation.
-  - `src/components/voices/voice-card.tsx`: Profile card with preview playback and default voice toggle.
-  - `src/components/voices/upload-dialog.tsx`: Drag-and-drop WAV upload with validation.
-  - `src/components/history/generation-list.tsx`: Paginated generation table with retry, delete, and download buttons.
-  - `src/components/layout/app-shell.tsx`: Responsive application container with mobile drawer and onboarding tour mounting.
-  - `src/components/layout/sidebar.tsx`: Fixed sidebar with navigation links and engine status pill.
-  - `src/components/layout/header.tsx`: Header bar with theme switcher and "Take Tour" launcher button.
-  - `src/components/layout/engine-status.tsx`: Real-time engine health badge with device identifier.
-  - `src/components/ui/*`: 19 accessible Shadcn UI components (`button`, `dialog`, `select`, `slider`, `switch`, etc.).
-- **Library Utilities (`src/lib/`)**:
-  - `src/lib/prisma.ts`: Prisma Client singleton with connection pooling protection.
-  - `src/lib/tts-client.ts`: Typed API client communicating with FastAPI over multipart HTTP.
-  - `src/lib/validations.ts`: Zod schemas for generation inputs, voice profiles, and presets.
-  - `src/lib/utils.ts`: Duration, file size, and Tailwind `cn` utility formatters.
+### Next.js Application (`src/`)
+- **Pages** — `(dashboard)/page.tsx` (studio), `voices/`, `history/`, `presets/`, `settings/`; `api/audio/[...path]/route.ts` (path normalization for three shapes, containment check → 403, Range → 206/416, stream `cancel()` destroying the Node handle).
+- **Server Actions** — `generation.ts` (model-aware; checks `requiresReferenceText` before spending inference), `voice-profiles.ts` (incl. `updateVoiceProfile` for the transcription), `presets.ts` (model-scoped), `models.ts`, `filesystem.ts`.
+- **Hooks** — `use-models.ts` (+`defaultParamsFor`), `use-generations.ts`, `use-voice-profiles.ts`, `use-presets.ts`, `use-engine-status.ts`, `use-directory-browser.ts`.
+- **Generation components** — `param-sliders.tsx` (presentational, schema-driven), `model-selector.tsx` (localStorage `namaa:model-id`, capability badges, resets `params` on switch), `model-params.tsx` (one Slider per declared param), `voice-controls.tsx` (model selector + params + preset filtering + schema-driven save dialog), `output-path-picker.tsx` (localStorage `namaa:output-dir`), `text-input.tsx`, `generation-form.tsx`, `audio-player.tsx`, `master-audio-dock.tsx`.
+- **Voice components** — `voice-recorder.tsx` (raw `getUserMedia`, teleprompter, duration bands), `upload-dialog.tsx` (record/upload tabs), `voice-card.tsx` (transcription dialog + `ناقص نص العينة` badge).
+- **History** — `generation-list.tsx` (`MODEL_LABELS`, `PARAM_LABELS`, renders `params` with a legacy-column fallback).
+- **Lib** — `tts-client.ts` (`TtsModel`, `ModelParamSpec`, `listModels()`), `tone-axes.ts` (semantic tone → per-model parameters), `validations.ts`, `audio-encode.ts`, `reference-script.ts`, `prisma.ts`, `utils.ts`.
+- **Other** — `layout/` (app shell, sidebar, header, engine status), `studio/studio-telemetry.tsx`, `tour/onboarding-tour.tsx` (4 steps).
 
 ### Database (`prisma/schema.prisma`)
-- **`VoiceProfile`**: Holds reference audio file paths, durations, and `isDefault` flags.
-- **`Generation`**: Records input text, output audio paths, duration, file size, parameter settings, and `GenerationStatus` enum (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`).
-- **`Preset`**: Stores named configurations of `speed`, `cfgStrength` and `nfeStep` values.
+- **`VoiceProfile`** — `referenceAudioPath`, `referenceText` (default `""`), `duration`, `isDefault`.
+- **`Generation`** — `text`, `audioPath`, `savedPath`, **`modelId`** (default `silma`), **`params Json?`**, `voiceProfileId`, `seed String?`, `duration`, `fileSize`, `status`, `error`; legacy `speed`/`cfgStrength`/`nfeStep` retained for pre-multi-model rows. Indexed on `createdAt desc`, `voiceProfileId`, `status`.
+- **`Preset`** — `name` (unique), `description`, **`modelId`**, **`params Json?`**, `voiceProfileId`; same three legacy columns.
 
 ---
 
-## 5. Storage Directories
-- `storage/audio/`: Local persistent storage for synthesized `.wav` speech files.
-- `storage/voice-samples/`: Local persistent storage for uploaded voice clone `.wav` reference clips.
-Both directories are tracked via `.gitkeep` and excluded from git version control.
+## 5. Storage
+- `storage/audio/` — generated `gen_*.wav` (30 files). Always written here even when a custom save folder is used.
+- `storage/voice-samples/` — uploaded/recorded `ref_*.wav` (1 file).
+- Both tracked via `.gitkeep` and excluded from version control.
+- Model weights live in `~/.cache/huggingface/hub`, not in the repo (~10 GB, plus 1.6 GB of Whisper if SILMA ever fell back to ASR).
+
+---
+
+## 6. Known Gaps & Loose Ends
+
+**Reference-length mismatch (SILMA only):**
+- The recorder targets 12–22 s and the read-aloud script is ~20 s, both tuned for the NAMAA models, which have no cap. SILMA truncates at 8.05 s and then discards `referenceText` in favour of Whisper large-v3-turbo.
+- The one existing profile, `AR_M_Nassim` (18.23 s, transcription present), is over the cap: it works with the NAMAA models and triggers ASR on SILMA.
+- A plan to fix this exists at `~/.claude/plans/what-it-is-downloading-lovely-squirrel.md` (shorter script, retuned recorder bands, `trim_reference_audio()`, a trim endpoint). **The user deferred it** — "I will come to it later."
+
+**Housekeeping:**
+- `tts-engine/venv-chatterbox-old/` (~1.3 GB) is still on disk, awaiting the go-ahead to delete.
+- Whisper weights (~1.6 GB) remain cached; removable once no profile exceeds SILMA's cap.
+- `main.py`'s FastAPI title is still `"NAMAA Egyptian TTS API"` from the single-model era.
+- `setup.sh`'s step counters read `[1/7]`…`[5/7]` then `[6/8]`…`[8/8]` — cosmetic.
+- One `Generation` row is stuck in `PROCESSING` (2026-09-04 01:46 UTC): the Next dev server was restarted mid-request while regenerating the Prisma client. Nothing reaps orphaned rows.
+
+---
+
+## 7. Recently Fixed (2026-09-04)
+
+- **Persona chips did nothing.** `text-input.tsx` still called `setValue` on the flat `speed`/`cfgStrength`/`nfeStep` fields that left `generateSchema` when parameters became per-model. Chips now carry a tone on shared axes and resolve it against the active model (`src/lib/tone-axes.ts`).
+- **Standalone preset builder saved empty presets.** `presets/page.tsx` rendered SILMA-only sliders and posted flat fields that Zod stripped, producing `params: {}`. It is now model-aware: a model selector, schema-driven sliders via `ParamSliders`, suggestions computed from each model's own ranges, and saved presets rendered with their model badge and correct labels.
+- **Preset names were globally unique**, so the same suggestion could only be saved for one model. Now `@@unique([name, modelId])`.
+- **The remembered model was wiped on every reload.** Radix `Select` emits `onValueChange('')` while the item list is still loading; `ModelSelector` wrote that through to `localStorage`. It now ignores ids that match no model, and restores only once the registry has arrived (also seeding that model's default params).
+- **English toasts** in `useDeletePreset` replaced with Arabic, matching the rest of the UI.
+- `.claude/settings.json` now states Python **3.11** exactly, with the reason.

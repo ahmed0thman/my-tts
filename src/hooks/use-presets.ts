@@ -48,10 +48,10 @@ export function useDeletePreset() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['presets'] });
-      toast.success('Preset deleted');
+      toast.success('تم الحذف بنجاح');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete preset: ${error.message}`);
+      toast.error(`فشل في حذف الإعداد: ${error.message}`);
     },
   });
 }

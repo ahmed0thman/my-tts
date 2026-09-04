@@ -1,24 +1,35 @@
-# Python ML Engine Rules (FastAPI & SILMA TTS)
+# Python ML Engine Rules (FastAPI, three Arabic models)
 
 ## Environment & Dependencies
 - Python **3.11** isolated in `tts-engine/venv`, provisioned with `uv venv --python 3.11`. Not 3.12/3.13: `silma-tts` pins `numpy<=1.26.4`.
-- Core libraries: `silma-tts`, `nemo_text_processing`, `catt-tashkeel`, `fastapi`, `uvicorn`, `torch==2.8.0`, `torchaudio==2.8.0`.
+- Two unrelated runtimes share the venv: `silma-tts` (F5-TTS) and `chatterbox-tts` (the NAMAA fine-tunes). They coexist only at **`torch==2.6.0` / `torchaudio==2.6.0` / `transformers==5.2.0`** — what `chatterbox-tts` hard-pins. SILMA itself only needs `torch>=2.0`.
+- 2.6 is also below the torchaudio 2.9 cutover to `torchcodec`, which needs FFmpeg ≤ 7 while Homebrew ships FFmpeg 9.
+- `setuptools<81` is pinned: chatterbox's `perth` watermarker imports `pkg_resources`, removed in setuptools 81+. Without it `perth.PerthImplicitWatermarker` resolves to `None` and generation dies with `TypeError: 'NoneType' object is not callable`.
 - Native prerequisites: `brew install openfst ffmpeg`.
 - Three dependencies cannot be resolved by pip on macOS and are installed `--no-deps`; the full reasoning lives at the top of `tts-engine/requirements.txt`. Do not "simplify" that staging away.
 - All audio processing is handled via `torchaudio`.
 
 ## Multi-Model Rules
-- Every backend lives in `tts-engine/engines/` and implements `TTSEngine`. Register it in `model_registry.py`; never special-case a model id in `main.py` or the frontend.
+- Every backend lives in `tts-engine/engines/` and implements `TTSEngine` (`base.py`). Register it in `model_registry.py`; never special-case a model id in `main.py` or the frontend.
 - A model's `describe()` carries its parameter schema, and the UI builds its controls from it. If a knob needs a new UI control type, extend the schema — do not hardcode the model.
+- `ChatterboxEngine` serves **both** NAMAA dialects from one class: they ship identical file layouts and differ only in the fine-tuned `t3`, so the registry passes `engine_id` / `label` / `dialect` / `repo_id` / `notes` per variant. Because the variants differ per instance, it exposes `describe_instance()`; its classmethod `describe()` deliberately raises.
 - Only one model is resident at a time. Any new engine must implement `unload()` properly (drop refs, `gc.collect()`, `torch.mps.empty_cache()`), or switching will OOM the 16GB machine.
-- Chatterbox's `T3` builds `patched_model` lazily on first inference and registers it as a submodule. Swapping `t3` weights afterwards must clear it first (`del t3.patched_model; t3.compiled = False`) or the strict `load_state_dict` fails with missing `patched_model.*` keys.
+- Switching between the two NAMAA dialects goes through `ChatterboxEngine.adopt()`, which takes over the loaded base and swaps only the `t3` weights (~19s instead of ~50s). `ModelManager.ensure_loaded` tries `adopt()` first and only unloads the previous engine when it returns `False`.
+- Chatterbox's `T3` builds `patched_model` lazily on first inference and registers it as a submodule. Swapping `t3` weights afterwards must clear it first (`del t3.patched_model; t3.compiled = False`) or the strict `load_state_dict` fails with missing `patched_model.*` keys. Keep the load **strict** so a genuinely wrong checkpoint still fails loudly.
+- `HF_HUB_DISABLE_XET=1` is set at the very top of `main.py`, before any `huggingface_hub` import. HuggingFace's xet transfer stalls indefinitely on some repos (NAMAA-Saudi-TTS: 0 bytes in 10 minutes, then 2.1GB in 175s with it off).
 
 ## Model Contract
-- `silma-ai/silma-tts` is a zero-shot cloner with **no built-in voice**: every call needs `ref_file` + `ref_text`. The NAMAA models clone from audio alone.
-- When no profile is selected, `model_manager.py` falls back to the sample shipped inside the package (`silma_tts/infer/ref_audio_samples/ar.ref.24k.wav`) and its known transcription.
-- Generation parameters are `speed` (0.5–2.0), `cfg_strength` (1–4), `nfe_step` (8–32) and `seed`. The old Chatterbox `exaggeration`/`cfg` pair does not exist and must not reappear in the UI.
-- The engine echoes the seed back so a take the user liked can be reproduced exactly.
-- Arabic text is diacritized by CATT and number-normalized by NeMo before synthesis; both are loaded at model construction.
+| id | repo | dialect | ref text | ref cap | params |
+|---|---|---|---|---|---|
+| `silma` | `silma-ai/silma-tts` | فصحى / MSA | **required** | 8.05s | `speed` 0.5–2, `cfgStrength` 1–4, `nfeStep` 8–32 (+`seed`) |
+| `namaa-saudi` | `NAMAA-Space/NAMAA-Saudi-TTS` | سعودي / نجدي | ignored | none | `exaggeration` 0–1, `cfgWeight` 0–1, `temperature` 0.1–1.5 |
+| `namaa-egyptian` | `NAMAA-Space/NAMAA-Egyptian-TTS` | مصري | ignored | none | same three |
+
+- `silma` is a zero-shot cloner with **no built-in voice**: every call needs `ref_file` + `ref_text`. With no profile selected, `SilmaEngine` falls back to the sample shipped inside the package (`silma_tts/infer/ref_audio_samples/ar.ref.24k.wav`) and its known transcription — and forces that transcription, since a user's `reference_text` would not describe it.
+- SILMA's `preprocess_ref_audio_text` clips references over **8.05s**, and a clipped clip makes it **discard the supplied `ref_text`** and re-transcribe with Whisper large-v3-turbo (a 1.6GB download, cached per-process only). `MAX_REFERENCE_SECONDS` in `silma_engine.py` records the cap and `describe()` publishes it as `maxReferenceSeconds`; nothing trims clips yet.
+- The NAMAA engines clone from audio alone. `generate()` ignores `reference_text` entirely, and omits `audio_prompt_path` when no profile is given.
+- Only SILMA echoes a seed back (`str(self.model.seed)`), so a take the user liked can be reproduced exactly. Chatterbox returns `None` and the `X-Seed` header is empty.
+- Arabic text is diacritized by CATT and number-normalized by NeMo before synthesis; both are loaded at `SilmaTTS` construction (`force_tashkeel=True`, `enable_normalizer=True`).
 
 ## Hardware Optimization (Apple Silicon M1 Pro)
 - In `tts-engine/model_manager.py`, device detection checks:
@@ -28,17 +39,23 @@
   return "cpu"
   ```
 - Inference is accelerated via Metal Performance Shaders (MPS), providing high throughput on unified memory.
-- Concurrency is guarded by an `asyncio.Lock()` around the model inference to prevent memory thrashing on GPU/MPS unified buffers.
+- `ModelManager` is a singleton guarded by an `asyncio.Lock()` held across both loading and inference, so a model swap can never race a generation on the same unified-memory buffers.
+- Blocking work (`load()`, `generate()`) is dispatched with `run_in_executor` so the event loop stays responsive.
 
 ## API Standards
 - Communication uses `multipart/form-data` for endpoints receiving text or files.
+- `POST /api/generate` takes `text`, `model_id`, optional `voice_profile_path`, `reference_text`, `output_dir`, and **`params` as a JSON string** — parameter names differ per backend, so they travel as a blob and the adapter picks out the keys it understands. An unknown `model_id` is a 400; a missing `reference_text` is a 400 only when the model declares `requiresReferenceText`.
+- `GET /api/models` returns `{ models, default, active }` — every model's capabilities and parameter schema. This is what makes the UI model-agnostic.
 - Audio outputs are returned as `StreamingResponse` with `media_type="audio/wav"` and custom metadata headers:
   - `X-Audio-Path`: Relative storage path
   - `X-Saved-Path`: Absolute path the WAV was written to (the user's chosen save folder, or storage/audio)
   - `X-Duration`: Audio duration in seconds
   - `X-Sample-Rate`: Audio sampling rate in Hz
   - `X-Peak` / `X-Peak-Normalized`: Original waveform peak, and whether it was scaled down before writing
-- Reference audio files must be clean WAV files between 3 and 30 seconds.
+  - `X-Seed`: Seed used, when the model exposes one
+  - `X-Model-Id`: Which engine rendered it
+- `GET /api/health` reports `model_loaded`, `device`, `sample_rate` and `active_model`. `GET /api/model-info` adds the full registry.
+- Reference audio files must be clean WAV files between 3 and 30 seconds (`validate_audio_file`).
 
 ## Output Handling
 - The vocoder occasionally returns peaks above full scale, which `torchaudio.save` hard-clips into audible crackle. `normalize_peak()` in `audio_utils.py` scales the waveform to 0.99 only when it exceeds 1.0, leaving quiet audio untouched so loudness stays comparable between generations.

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePresets, useCreatePreset, useDeletePreset } from '@/hooks/use-presets';
+import { useModels, defaultParamsFor } from '@/hooks/use-models';
 import { PageHeader } from '@/components/layout/page-header';
+import { ParamSliders } from '@/components/generation/param-sliders';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,18 +17,30 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Trash2, Settings2, Sparkles, Check } from 'lucide-react';
+import { Plus, Trash2, Settings2, Sparkles, Check, Cpu } from 'lucide-react';
+import { paramsForTone, modelSupportsTone, type Tone } from '@/lib/tone-axes';
+import type { TtsModel } from '@/lib/tts-client';
 import { toast } from 'sonner';
 
-const RECOMMENDED_PRESETS = [
-  { name: 'متمهل', description: 'إلقاء بطيء وواضح', speed: 0.85, cfgStrength: 2.0, nfeStep: 16 },
-  { name: 'محايد', description: 'الإعدادات الافتراضية', speed: 1.0, cfgStrength: 2.0, nfeStep: 16 },
-  { name: 'سريع', description: 'قراءة سريعة للنصوص الطويلة', speed: 1.25, cfgStrength: 2.0, nfeStep: 16 },
-  { name: 'مطابق للعينة', description: 'التزام أعلى بنبرة الصوت المرجعي', speed: 1.0, cfgStrength: 3.0, nfeStep: 24 },
-  { name: 'جودة عالية', description: 'أنقى صوت، وقت توليد أطول', speed: 1.0, cfgStrength: 2.0, nfeStep: 32 },
+/** The studio remembers the last model here; start from the same one. */
+const MODEL_STORAGE_KEY = 'namaa:model-id';
+
+/**
+ * Suggestions are described on shared tone axes rather than one model's knobs,
+ * so the same five work for every engine. Each is resolved against the selected
+ * model's own ranges, and any whose axes that model cannot express is hidden —
+ * "جودة عالية" is meaningless for a model with no fidelity knob.
+ */
+const RECOMMENDED_TONES: { name: string; description: string; tone: Tone }[] = [
+  { name: 'متمهل', description: 'إلقاء بطيء وواضح', tone: { pace: 0.25, expressiveness: 0.35 } },
+  { name: 'محايد', description: 'توازن طبيعي بين السرعة والتعبير', tone: { pace: 0.5, expressiveness: 0.5 } },
+  { name: 'سريع', description: 'قراءة سريعة للنصوص الطويلة', tone: { pace: 0.8, expressiveness: 0.45 } },
+  { name: 'معبّر', description: 'نبرة حماسية بتنوّع أوسع', tone: { pace: 0.6, expressiveness: 0.85 } },
+  { name: 'مطابق للعينة', description: 'التزام أعلى بنبرة الصوت المرجعي', tone: { fidelity: 0.85 } },
+  { name: 'جودة عالية', description: 'أنقى صوت، وقت توليد أطول', tone: { fidelity: 1 } },
 ];
 
 /** Small paired readout used on every preset tile. */
@@ -34,50 +48,93 @@ function ParamPair({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-baseline justify-between gap-2 text-xs">
       <span className="text-muted-foreground">{label}</span>
-      <span className="numeric font-bold text-foreground">{value.toFixed(2)}</span>
+      <span className="numeric font-bold text-foreground">{value}</span>
     </div>
   );
 }
 
 export default function PresetsPage() {
   const { data: presets, isLoading } = usePresets();
+  const { data: modelsData, isLoading: isLoadingModels } = useModels();
   const { mutate: createPreset, isPending: isCreating } = useCreatePreset();
   const { mutate: deletePreset } = useDeletePreset();
 
-  const [isOpen, setIsOpen] = useState(false);
-  const [newPreset, setNewPreset] = useState({
-    name: '',
-    description: '',
-    speed: 1.0,
-    cfgStrength: 2.0,
-    nfeStep: 16,
-  });
+  const models = useMemo(() => modelsData?.models ?? [], [modelsData]);
+  const [modelId, setModelId] = useState<string>('silma');
+  const activeModel = models.find((m) => m.id === modelId);
 
-  const savedNames = new Set((presets ?? []).map((p: any) => p.name));
+  const [isOpen, setIsOpen] = useState(false);
+  const [newPreset, setNewPreset] = useState({ name: '', description: '' });
+  const [draftParams, setDraftParams] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
+      if (saved) setModelId(saved);
+    } catch {
+      // storage can be unavailable; the default model still works
+    }
+  }, []);
+
+  // Parameter names do not transfer between models, so the draft resets to the
+  // newly selected model's declared defaults instead of carrying stale keys.
+  useEffect(() => {
+    setDraftParams(defaultParamsFor(activeModel));
+  }, [activeModel]);
+
+  /** key → Arabic label, across every model, for rendering saved presets. */
+  const paramLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const model of models) {
+      for (const spec of model.params) labels[spec.key] = spec.label;
+    }
+    return labels;
+  }, [models]);
+
+  const modelLabel = (id: string) => models.find((m) => m.id === id)?.label ?? id;
+
+  // A preset name is unique per model, so the same name may exist for another.
+  const savedForModel = new Set(
+    (presets ?? []).filter((p: any) => (p.modelId ?? 'silma') === modelId).map((p: any) => p.name),
+  );
+
+  const applicableTones = RECOMMENDED_TONES.filter((preset) =>
+    modelSupportsTone(activeModel, preset.tone),
+  );
 
   const handleCreate = () => {
     if (!newPreset.name.trim()) {
       toast.error('يرجى إدخال اسم الإعداد');
       return;
     }
-    createPreset(newPreset, {
-      onSuccess: () => {
-        toast.success('تم الحفظ بنجاح');
-        setIsOpen(false);
-        setNewPreset({ name: '', description: '', speed: 1.0, cfgStrength: 2.0, nfeStep: 16 });
+    createPreset(
+      { name: newPreset.name.trim(), description: newPreset.description, modelId, params: draftParams },
+      {
+        onSuccess: () => {
+          toast.success('تم الحفظ بنجاح');
+          setIsOpen(false);
+          setNewPreset({ name: '', description: '' });
+          setDraftParams(defaultParamsFor(activeModel));
+        },
       },
-    });
+    );
   };
 
-  const handleAddRecommended = (preset: any) => {
-    createPreset(preset, {
-      onSuccess: () => toast.success(`تم إضافة إعداد "${preset.name}" بنجاح`),
-    });
+  const handleAddRecommended = (preset: { name: string; description: string; tone: Tone }) => {
+    createPreset(
+      {
+        name: preset.name,
+        description: preset.description,
+        modelId,
+        params: paramsForTone(activeModel, preset.tone),
+      },
+      { onSuccess: () => toast.success(`تم إضافة إعداد "${preset.name}" لـ ${modelLabel(modelId)}`) },
+    );
   };
 
   const handleDelete = (id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا الإعداد؟')) {
-      deletePreset(id, { onSuccess: () => toast.success('تم الحذف بنجاح') });
+      deletePreset(id);
     }
   };
 
@@ -85,11 +142,11 @@ export default function PresetsPage() {
     <div className="space-y-10">
       <PageHeader
         title="الإعدادات المسبقة"
-        description="احفظ تركيبات التعبير والإيقاع اللي بتستخدمها كتير، وطبّقها بضغطة واحدة من الاستوديو."
+        description="احفظ تركيبات الإلقاء اللي بتستخدمها كتير، وطبّقها بضغطة واحدة من الاستوديو. كل إعداد مرتبط بنموذجه — القيم مش بتنتقل بين النماذج."
         action={
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={!activeModel}>
                 <Plus className="h-4 w-4" />
                 إضافة إعداد
               </Button>
@@ -98,7 +155,7 @@ export default function PresetsPage() {
               <DialogHeader>
                 <DialogTitle>إضافة إعداد مسبق جديد</DialogTitle>
                 <DialogDescription>
-                  اضبط التعبير والإيقاع، واحفظهم باسم تقدر تلاقيه بسرعة بعدين.
+                  اضبط معاملات النموذج، واحفظهم باسم تقدر تلاقيه بسرعة بعدين.
                 </DialogDescription>
               </DialogHeader>
 
@@ -123,57 +180,13 @@ export default function PresetsPage() {
                   />
                 </div>
 
+                {/* Sliders are rendered from the selected model's own schema. */}
                 <div className="space-y-5 rounded-xl border border-border bg-muted/40 p-4">
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <Label>سرعة الإلقاء (Speed)</Label>
-                      <span className="numeric text-sm font-bold text-primary">
-                        {newPreset.speed.toFixed(2)}x
-                      </span>
-                    </div>
-                    <Slider
-                      min={0.5}
-                      max={2}
-                      step={0.05}
-                      value={[newPreset.speed]}
-                      onValueChange={(v) => setNewPreset((p) => ({ ...p, speed: v[0] }))}
-                      aria-label="سرعة الإلقاء"
-                    />
+                  <div className="flex items-center justify-between gap-3">
+                    <Label className="text-xs">معاملات {activeModel?.label ?? modelId}</Label>
+                    <Badge variant="outline" className="text-[10px]">{activeModel?.dialect}</Badge>
                   </div>
-
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <Label>الالتزام بالعينة (CFG Strength)</Label>
-                      <span className="numeric text-sm font-bold text-primary">
-                        {newPreset.cfgStrength.toFixed(1)}
-                      </span>
-                    </div>
-                    <Slider
-                      min={1}
-                      max={4}
-                      step={0.1}
-                      value={[newPreset.cfgStrength]}
-                      onValueChange={(v) => setNewPreset((p) => ({ ...p, cfgStrength: v[0] }))}
-                      aria-label="الالتزام بالعينة"
-                    />
-                  </div>
-
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <Label>خطوات التوليد (NFE Steps)</Label>
-                      <span className="numeric text-sm font-bold text-primary">
-                        {newPreset.nfeStep}
-                      </span>
-                    </div>
-                    <Slider
-                      min={8}
-                      max={32}
-                      step={4}
-                      value={[newPreset.nfeStep]}
-                      onValueChange={(v) => setNewPreset((p) => ({ ...p, nfeStep: v[0] }))}
-                      aria-label="خطوات التوليد"
-                    />
-                  </div>
+                  <ParamSliders model={activeModel} values={draftParams} onChange={setDraftParams} />
                 </div>
               </div>
 
@@ -189,6 +202,34 @@ export default function PresetsPage() {
           </Dialog>
         }
       />
+
+      {/* Model scope */}
+      <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-plate">
+        <span className="flex items-center gap-2 text-sm font-bold">
+          <span className="rounded-md bg-primary/10 p-1 text-primary">
+            <Cpu className="h-4 w-4" />
+          </span>
+          النموذج
+        </span>
+        <Select value={modelId} onValueChange={setModelId}>
+          <SelectTrigger dir="rtl" className="h-10 w-64">
+            <SelectValue placeholder="اختر النموذج" />
+          </SelectTrigger>
+          <SelectContent dir="rtl">
+            {models.map((model: TtsModel) => (
+              <SelectItem key={model.id} value={model.id} className="cursor-pointer">
+                <div className="text-right">
+                  <p className="text-sm font-bold">{model.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{model.dialect}</p>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          الإضافة والاقتراحات بتتحفظ للنموذج ده. الاستوديو بيعرض إعدادات النموذج المختار بس.
+        </p>
+      </section>
 
       {/* Saved */}
       <section className="space-y-4">
@@ -217,45 +258,63 @@ export default function PresetsPage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {presets?.map((preset: any, i: number) => (
-              <article
-                key={preset.id}
-                className="animate-rise flex flex-col rounded-2xl border border-border bg-card shadow-plate"
-                style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}
-              >
-                <div className="space-y-1 p-5 pb-3">
-                  <h3 className="truncate font-bold tracking-tight">{preset.name}</h3>
-                  <p className="line-clamp-2 text-xs text-muted-foreground">
-                    {preset.description || 'بدون وصف'}
-                  </p>
-                </div>
+            {presets?.map((preset: any, i: number) => {
+              const params = (preset.params as Record<string, number> | null) ?? {};
+              const entries = Object.entries(params);
 
-                <div className="mt-auto space-y-2 border-t border-border bg-muted/30 px-5 py-3">
-                  <ParamPair label="سرعة الإلقاء" value={preset.speed} />
-                  <ParamPair label="الالتزام بالعينة" value={preset.cfgStrength} />
-                  {preset.voiceProfileId && (
-                    <div className="flex items-baseline justify-between gap-2 text-xs">
-                      <span className="text-muted-foreground">الصوت</span>
-                      <Badge variant="outline" className="max-w-32 truncate">
-                        {preset.voiceProfile?.name || 'مخصص'}
+              return (
+                <article
+                  key={preset.id}
+                  className="animate-rise flex flex-col rounded-2xl border border-border bg-card shadow-plate"
+                  style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}
+                >
+                  <div className="space-y-1.5 p-5 pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="truncate font-bold tracking-tight">{preset.name}</h3>
+                      <Badge variant="outline" className="shrink-0 border-primary/30 text-[10px] text-primary">
+                        {modelLabel(preset.modelId ?? 'silma')}
                       </Badge>
                     </div>
-                  )}
-                </div>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                      {preset.description || 'بدون وصف'}
+                    </p>
+                  </div>
 
-                <div className="border-t border-border p-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => handleDelete(preset.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    حذف الإعداد
-                  </Button>
-                </div>
-              </article>
-            ))}
+                  <div className="mt-auto space-y-2 border-t border-border bg-muted/30 px-5 py-3">
+                    {entries.length > 0 ? (
+                      entries.map(([key, value]) => (
+                        <ParamPair key={key} label={paramLabels[key] ?? key} value={value} />
+                      ))
+                    ) : (
+                      // Presets saved before parameters became model-scoped kept
+                      // their values in the legacy columns.
+                      <>
+                        <ParamPair label="سرعة الإلقاء" value={preset.speed} />
+                        <ParamPair label="الالتزام بالعينة" value={preset.cfgStrength} />
+                      </>
+                    )}
+                    {preset.voiceProfileId && (
+                      <div className="flex items-baseline justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground">الصوت</span>
+                        <Badge variant="outline" className="max-w-32 truncate">مخصص</Badge>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-border p-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => handleDelete(preset.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      حذف الإعداد
+                    </Button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -265,54 +324,67 @@ export default function PresetsPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            <h2 className="text-base font-bold tracking-tight">إعدادات مقترحة</h2>
+            <h2 className="text-base font-bold tracking-tight">
+              إعدادات مقترحة لـ {activeModel?.label ?? '...'}
+            </h2>
           </div>
           <p className="text-xs text-muted-foreground">
-            نقط بداية مضبوطة على العامية المصرية — ضيفها لمكتبتك وعدّلها زي ما تحب.
+            نقط بداية بتتحسب من مدى كل معامل في النموذج نفسه — ضيفها لمكتبتك وعدّلها زي ما تحب.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {RECOMMENDED_PRESETS.map((preset) => {
-            const alreadySaved = savedNames.has(preset.name);
-            return (
-              <article
-                key={preset.name}
-                className="flex flex-col rounded-2xl border border-dashed border-border-strong bg-card/40 p-5"
-              >
-                <div className="space-y-1">
-                  <h3 className="font-bold tracking-tight">{preset.name}</h3>
-                  <p className="text-xs text-muted-foreground">{preset.description}</p>
-                </div>
+        {isLoadingModels ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-44 rounded-2xl" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {applicableTones.map((preset) => {
+              const alreadySaved = savedForModel.has(preset.name);
+              const resolved = paramsForTone(activeModel, preset.tone);
 
-                <div className="my-4 space-y-2">
-                  <ParamPair label="سرعة الإلقاء" value={preset.speed} />
-                  <ParamPair label="الالتزام بالعينة" value={preset.cfgStrength} />
-                </div>
-
-                <Button
-                  variant={alreadySaved ? 'ghost' : 'outline'}
-                  size="sm"
-                  className="mt-auto w-full"
-                  disabled={alreadySaved || isCreating}
-                  onClick={() => handleAddRecommended(preset)}
+              return (
+                <article
+                  key={preset.name}
+                  className="flex flex-col rounded-2xl border border-dashed border-border-strong bg-card/40 p-5"
                 >
-                  {alreadySaved ? (
-                    <>
-                      <Check className="h-3.5 w-3.5" />
-                      مضاف بالفعل
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-3.5 w-3.5" />
-                      إضافة للمكتبة
-                    </>
-                  )}
-                </Button>
-              </article>
-            );
-          })}
-        </div>
+                  <div className="space-y-1">
+                    <h3 className="font-bold tracking-tight">{preset.name}</h3>
+                    <p className="text-xs text-muted-foreground">{preset.description}</p>
+                  </div>
+
+                  <div className="my-4 space-y-2">
+                    {Object.entries(resolved).map(([key, value]) => (
+                      <ParamPair key={key} label={paramLabels[key] ?? key} value={value} />
+                    ))}
+                  </div>
+
+                  <Button
+                    variant={alreadySaved ? 'ghost' : 'outline'}
+                    size="sm"
+                    className="mt-auto w-full"
+                    disabled={alreadySaved || isCreating || !activeModel}
+                    onClick={() => handleAddRecommended(preset)}
+                  >
+                    {alreadySaved ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        مضاف بالفعل
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-3.5 w-3.5" />
+                        إضافة للمكتبة
+                      </>
+                    )}
+                  </Button>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );

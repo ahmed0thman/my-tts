@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useModels, defaultParamsFor } from '@/hooks/use-models';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,15 +24,24 @@ export function ModelSelector({ onModelChange }: ModelSelectorProps) {
   const models = data?.models ?? [];
   const active = models.find((m) => m.id === modelId);
 
-  // Restore the last used model across sessions
+  // Restore the last used model across sessions — but only once the registry
+  // has arrived, so a saved id can be checked against the models that actually
+  // exist (one may have been removed since it was stored).
+  const hasRestored = useRef(false);
   useEffect(() => {
+    if (hasRestored.current || models.length === 0) return;
+    hasRestored.current = true;
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) setValue('modelId', saved, { shouldDirty: false });
+      const restored = models.find((m) => m.id === saved);
+      if (restored) {
+        setValue('modelId', restored.id, { shouldDirty: false });
+        setValue('params', defaultParamsFor(restored), { shouldDirty: false });
+      }
     } catch {
       // localStorage can be unavailable; the default model still works
     }
-  }, [setValue]);
+  }, [models, setValue]);
 
   useEffect(() => {
     onModelChange?.(active);
@@ -40,6 +49,11 @@ export function ModelSelector({ onModelChange }: ModelSelectorProps) {
 
   const handleChange = (nextId: string) => {
     const next = models.find((m) => m.id === nextId);
+    // Radix emits onValueChange('') when the controlled value matches no item,
+    // which happens on every mount while the model list is still loading.
+    // Writing that through wiped the remembered id and silently reset the
+    // selection to the default on each reload.
+    if (!next) return;
     setValue('modelId', nextId, { shouldDirty: true });
     // Parameter names do not transfer between models, so reset to the new
     // model's declared defaults rather than carrying stale keys across.

@@ -40,6 +40,11 @@ export async function createPreset(input: FormData | CreatePresetInput) {
     revalidatePath('/');
     return { success: true, data: preset };
   } catch (error: any) {
+    // Names are unique per model, so the collision is always with the same
+    // model's own library — say that instead of leaking the Prisma error.
+    if (error?.code === 'P2002') {
+      return { success: false, error: 'فيه إعداد بنفس الاسم للنموذج ده بالفعل' };
+    }
     return { success: false, error: error.message || 'Validation failed' };
   }
 }

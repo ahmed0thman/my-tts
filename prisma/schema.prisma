@@ -55,7 +55,7 @@ model Generation {
 
 model Preset {
   id              String   @id @default(cuid())
-  name            String   @unique
+  name            String
   description     String?
   modelId         String   @default("silma")  // presets are model-specific: the parameters do not transfer
   params          Json?
@@ -65,4 +65,9 @@ model Preset {
   nfeStep         Int      @default(16)
   voiceProfileId  String?
   createdAt       DateTime @default(now())
+
+  // Scoped per model, not globally: the same name ("سريع", "محايد") is a
+  // different parameter combination for each engine, and a global unique made
+  // saving the second model's copy fail.
+  @@unique([name, modelId])
 }

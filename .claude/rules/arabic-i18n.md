@@ -27,3 +27,14 @@
   - "Batch Mode": `وضع الدفعات`
   - "Presets": `الإعدادات المسبقة`
   - "History": `سجل التوليد`
+  - "Model" (the TTS engine choice): `نموذج النطق`
+  - "Exaggeration": `التعبير العاطفي`
+  - "CFG Weight" (Chatterbox pacing): `سرعة الإيقاع`
+  - "Temperature": `التنوّع العشوائي`
+  - "Save location": `مكان الحفظ`
+  - "Record your voice": `سجّل صوتك`
+
+## Model & Dialect Labels
+- Dialect names come from the engine (`describe()` / `describe_instance()`), not the frontend, so they stay consistent between the API and the UI: `فصحى / MSA`, `سعودي / نجدي`, `مصري`.
+- Capability badges are Arabic, the model repo id stays `dir="ltr" font-mono`: `محتاج نص العينة`, `العينة ≤ 8.05s`.
+- `src/components/history/generation-list.tsx` keeps the short history labels (`MODEL_LABELS`, `PARAM_LABELS`) — add new models and knobs there too, or a badge falls back to the raw English key.

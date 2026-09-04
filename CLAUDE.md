@@ -1,7 +1,7 @@
 # CLAUDE.md — Arabic TTS Control Board
 
 ## Project Overview
-A production-grade local control board for text-to-speech and zero-shot voice cloning across **three switchable Arabic models**. Built with Next.js 15, Tailwind CSS v4, Shadcn/ui, React Query v5, React Hook Form v7, Prisma v6, and PostgreSQL 18, communicating with a Python FastAPI inference sidecar.
+A production-grade local control board for text-to-speech and zero-shot voice cloning across **three switchable Arabic models**. Built with Next.js 15, Tailwind CSS v4, Shadcn/ui, React Query v5, React Hook Form v7, Prisma v6, and PostgreSQL 17, communicating with a Python FastAPI inference sidecar.
 
 | id | Model | Dialect | Runtime |
 |---|---|---|---|
@@ -25,7 +25,7 @@ All three models clone zero-shot from a reference clip, but they differ:
 ## Architecture
 - **Web App**: Next.js 15 (App Router), React 19, TypeScript strict mode, RTL Arabic (Cairo font).
 - **TTS Engine**: Python **3.11** FastAPI server running all three models on Apple Silicon MPS (Metal). 3.11 is mandatory — silma-tts pins `numpy<=1.26.4`, which has no wheels for 3.12/3.13.
-- **Database**: PostgreSQL 18 via Prisma ORM (`prisma/schema.prisma`).
+- **Database**: PostgreSQL 17 (Alpine, Docker, host port **5440**) via Prisma ORM (`prisma/schema.prisma`).
 - **Communication**: Next.js Server Actions call FastAPI (`http://localhost:8000/api/*`) via `src/lib/tts-client.ts`.
 - **Audio Storage**: Persistent filesystem storage in `storage/audio/` and `storage/voice-samples/`, streamed via Next.js route `src/app/api/audio/[...path]/route.ts`.
 
@@ -37,8 +37,10 @@ All three models clone zero-shot from a reference clip, but they differ:
 - **Type Check**: `npx tsc --noEmit`
 - **Database Studio**: `npx prisma studio`
 - **Database Schema Push**: `npx prisma db push`
-- **Python Fast-Check**: `tts-engine/venv/bin/python -m py_compile tts-engine/*.py`
-- **Engine Import Check**: `tts-engine/venv/bin/python -c 'from silma_tts.api import SilmaTTS'`
+- **Python Fast-Check**: `tts-engine/venv/bin/python -m py_compile tts-engine/*.py tts-engine/engines/*.py`
+- **Engine Import Checks**: `tts-engine/venv/bin/python -c 'from silma_tts.api import SilmaTTS'` and
+  `tts-engine/venv/bin/python -c 'from chatterbox.mtl_tts import ChatterboxMultilingualTTS'`
+- **Live Model List**: `curl -s localhost:8000/api/models` (also reports which one is resident)
 
 ## Installing the Engine (why it is not just `pip install silma-tts`)
 `pip install silma-tts` **fails on macOS**. Three separate incompatibilities, all handled by `scripts/setup.sh` and documented at the top of `tts-engine/requirements.txt`:
@@ -54,6 +56,20 @@ All three models clone zero-shot from a reference clip, but they differ:
 - **Forms & Validation**: Always use Zod schemas from `src/lib/validations.ts` integrated via `@hookform/resolvers/zod` into `react-hook-form`.
 - **State Management**: Use React Query for server data. Server Actions must return `{ success: boolean, data?: T, error?: string }`.
 - **RTL & Typography**: Primary UI language is Egyptian Arabic (`dir="rtl"`, `font-family: 'Cairo'`). Audio players and English technical tags (like MPS/Hz) use `dir="ltr"`.
+
+## Tone Axes (how model-agnostic presets work)
+`src/lib/tone-axes.ts` maps three shared semantic dials — `pace`,
+`expressiveness`, `fidelity` — onto whatever knobs a model declares. Each
+*parameter key* (not model id) states which axis it moves and in which
+direction, and interpolation is anchored on the parameter's own `default`, so
+0.5 always means "leave it neutral" even when the default is off-centre in its
+range (SILMA's `speed` defaults to 1.0 inside 0.5–2.0). A model whose knobs map
+to no axis simply keeps its defaults — registering a fourth model still needs no
+change here.
+
+This backs the studio's persona chips and the presets page's suggestions.
+Suggestions whose axes a model cannot express are hidden rather than rendered
+as a no-op (NAMAA has no `fidelity` knob, so «جودة عالية» does not appear).
 
 ## Modular Claude Docs (.claude/)
 - Rules & Standards: `.claude/rules/` (`architecture.md`, `frontend.md`, `backend-ml.md`, `database.md`, `arabic-i18n.md`)

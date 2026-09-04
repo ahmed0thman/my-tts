@@ -3,7 +3,7 @@
   "version": "2026-09",
   "project": {
     "name": "namaa-tts-control-board",
-    "description": "Local control board for NAMAA Egyptian Text-to-Speech & zero-shot voice cloning",
+    "description": "Local control board for Arabic TTS and zero-shot voice cloning across three switchable models: SILMA (Fusha/MSA), NAMAA Saudi and NAMAA Egyptian",
     "primaryLanguage": "TypeScript",
     "secondaryLanguage": "Python",
     "defaultEncoding": "utf-8"
@@ -26,12 +26,13 @@
   },
   "environment": {
     "nodeVersion": ">=24.0.0",
-    "pythonVersion": ">=3.10.0",
+    "pythonVersion": "3.11",
     "defaultPorts": {
       "web": 3000,
       "engine": 8000,
       "database": 5440
-    }
+    },
+    "pythonVersionNote": "Exactly 3.11 — silma-tts pins numpy<=1.26.4, which has no wheels for 3.12/3.13. The venv is provisioned with `uv venv --python 3.11`."
   },
   "conventions": {
     "preferTypeScriptStrict": true,
