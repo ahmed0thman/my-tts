@@ -144,7 +144,7 @@ export function UploadDialog({ children }: { children: React.ReactNode }) {
         <DialogHeader>
           <DialogTitle>إضافة صوت جديد</DialogTitle>
           <DialogDescription>
-            سجّل مباشرة أو ارفع ملف WAV نظيف من ٣ لـ ٣٠ ثانية عشان الاستنساخ يطلع دقيق.
+            سجّل مباشرة أو ارفع ملف WAV نظيف من ٣ لـ ١٠ ثواني عشان الاستنساخ يطلع دقيق.
           </DialogDescription>
         </DialogHeader>
 
@@ -271,7 +271,7 @@ export function UploadDialog({ children }: { children: React.ReactNode }) {
                     />
                   </FormControl>
                   <p className="text-[11px] leading-5 text-muted-foreground">
-                    المحرك بيستنسخ الصوت من العينة + نصها. لو النص مش مطابق، النطق هيطلع
+                    النموذج بيستنسخ الصوت من العينة + نصها. لو النص مش مطابق، النطق هيطلع
                     متعثر. لو سجّلت من التبويب التاني، النص بيتملي تلقائياً.
                   </p>
                   <FormMessage />

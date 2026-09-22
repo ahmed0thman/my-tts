@@ -307,7 +307,7 @@ export function VoiceRecorder({ onRecordingReady }: VoiceRecorderProps) {
               <>
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                 <p className="text-[11px] leading-5">
-                  التسجيل قصير أوي ({result.duration.toFixed(1)} ثانية). المحرك محتاج {MIN_DURATION} ثواني على الأقل —
+                  التسجيل قصير أوي ({result.duration.toFixed(1)} ثانية). النموذج محتاج {MIN_DURATION} ثواني على الأقل —
                   اقرا الفقرة كاملة.
                 </p>
               </>

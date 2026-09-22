@@ -15,7 +15,7 @@ export default function VoicesPage() {
     <div className="space-y-8">
       <PageHeader
         title="الأصوات"
-        description="ارفع أو سجّل عينة صوتية نظيفة، وخلي المحرك يستنسخها ويستخدمها في التوليد."
+        description="ارفع أو سجّل عينة صوتية نظيفة، وخلي النموذج يستنسخها ويستخدمها في التوليد."
         action={
           <UploadDialog>
             <Button>
@@ -48,7 +48,7 @@ export default function VoicesPage() {
           <div className="space-y-1.5">
             <h3 className="text-lg font-bold">لسه مفيش أصوات محفوظة</h3>
             <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
-              ضيف عينة صوتية من ٣ لـ ٣٠ ثانية، والمحرك هيستنسخ نبرتها ويقدر يقرأ بيها أي نص
+              ضيف عينة صوتية من ٣ لـ ١٠ ثواني، والنموذج هيستنسخ نبرتها ويقدر يقرأ بيها أي نص
               مصري تكتبه.
             </p>
           </div>

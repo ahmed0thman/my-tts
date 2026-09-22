@@ -53,7 +53,7 @@ export default function SettingsPage() {
   const handleSaveUrl = () => {
     try {
       localStorage.setItem('engine_url', engineUrl);
-      toast.success('تم حفظ رابط المحرك بنجاح');
+      toast.success('تم حفظ رابط النموذج بنجاح');
       refetch();
     } catch {
       toast.error('تعذّر حفظ الرابط في هذا المتصفح');
@@ -68,7 +68,7 @@ export default function SettingsPage() {
     <div className="space-y-8">
       <PageHeader
         title="الإعدادات"
-        description="إعدادات النظام والاتصال بمحرك توليد الصوت."
+        description="إعدادات النظام والاتصال بنموذج توليد الصوت."
       />
 
       <div className="grid gap-6">
@@ -77,7 +77,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Server className="h-4 w-4 text-primary" />
-              اتصال المحرك (TTS Engine)
+              اتصال النموذج (TTS Engine)
             </CardTitle>
             <CardDescription>
               إعدادات الاتصال بالخادم المحلي لتوليد الصوت (Sawtak Engine)
@@ -118,7 +118,7 @@ export default function SettingsPage() {
                     {isLoading
                       ? 'جاري التحقق...'
                       : isOnline
-                        ? 'المحرك يعمل بشكل طبيعي'
+                        ? 'النموذج يعمل بشكل طبيعي'
                         : 'تأكد من تشغيل الخادم المحلي'}
                   </p>
                 </div>

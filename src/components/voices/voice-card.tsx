@@ -157,7 +157,7 @@ export function VoiceCard({ profile }: { profile: any }) {
             setDraftText(profile.referenceText || '');
             setIsTextOpen(true);
           }}
-          title="النص المنطوق في العينة — المحرك محتاجه عشان يستنسخ الصوت"
+          title="النص المنطوق في العينة — النموذج محتاجه عشان يستنسخ الصوت"
         >
           <FileText className="h-3.5 w-3.5" />
           نص العينة
@@ -192,7 +192,7 @@ export function VoiceCard({ profile }: { profile: any }) {
           <DialogHeader>
             <DialogTitle>نص العينة — {profile.name}</DialogTitle>
             <DialogDescription className="text-xs leading-5">
-              اكتب بالظبط اللي اتقال في التسجيل المرجعي. المحرك بيستنسخ الصوت من
+              اكتب بالظبط اللي اتقال في التسجيل المرجعي. النموذج بيستنسخ الصوت من
               العينة + نصها، ولو النص مش مطابق النطق هيطلع متعثر.
             </DialogDescription>
           </DialogHeader>

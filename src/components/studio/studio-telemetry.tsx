@@ -57,7 +57,7 @@ export function StudioTelemetry({ activeMode, onModeChange }: StudioTelemetryPro
               )}
             />
           </span>
-          {isOnline ? 'المحرك شغّال' : 'المحرك واقف'}
+          {isOnline ? 'النموذج جاهز' : 'النموذج مش شغّال'}
         </span>
 
         <Spec icon={Cpu}>Apple Silicon · {device}</Spec>

@@ -29,7 +29,7 @@ export function EngineStatus() {
             </span>
           )}
           <span className="truncate text-xs font-bold">
-            {isLoading ? 'جاري التحقق' : isOnline ? 'المحرك متصل' : 'المحرك غير متصل'}
+            {isLoading ? 'جاري التحقق' : isOnline ? 'النموذج متصل' : 'النموذج مش متصل'}
           </span>
         </div>
 
