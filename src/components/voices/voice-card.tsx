@@ -87,12 +87,21 @@ export function VoiceCard({ profile }: { profile: any }) {
             </Badge>
           )}
         </div>
-        {profile.isDefault && (
-          <Badge variant="accent" className="shrink-0">
-            <Star className="fill-current" />
-            افتراضي
-          </Badge>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Shipped with the model rather than recorded here — these sort below
+              the user's own voices, so the badge explains the grouping. */}
+          {profile.isBuiltin && (
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              جاهز
+            </Badge>
+          )}
+          {profile.isDefault && (
+            <Badge variant="accent" className="shrink-0">
+              <Star className="fill-current" />
+              افتراضي
+            </Badge>
+          )}
+        </div>
       </header>
 
       {/* Metadata is LTR-isolated: durations and dates otherwise reorder

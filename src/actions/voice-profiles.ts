@@ -42,7 +42,9 @@ export async function createVoiceProfile(formData: FormData) {
 export async function getVoiceProfiles() {
   try {
     const profiles = await prisma.voiceProfile.findMany({
-      orderBy: { createdAt: 'desc' },
+      // The user's own voices first, then the ones shipped with the model;
+      // newest-first within each group.
+      orderBy: [{ isBuiltin: 'asc' }, { createdAt: 'desc' }],
       include: {
         _count: {
           select: { generations: true }

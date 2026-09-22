@@ -17,6 +17,7 @@ model VoiceProfile {
   referenceText      String       @default("")  // transcription of the reference clip — SILMA requires it to clone; empty means "needs filling in"
   duration           Float        // duration of reference audio in seconds
   isDefault          Boolean      @default(false)
+  isBuiltin          Boolean      @default(false)  // shipped with the model (scripts/import_builtin_voices.py), not recorded by the user — sorts below their own voices
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   generations        Generation[]
