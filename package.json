@@ -15,8 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "electron": "node electron/launch.js",
-    "electron:build": "next build && electron-builder --mac --dir",
-    "electron:dist": "next build && electron-builder --mac",
+    "electron:build": "npm run icons && node scripts/prepare-desktop-build.mjs && next build && electron-builder --mac --dir",
+    "electron:dist": "npm run icons && node scripts/prepare-desktop-build.mjs && next build && electron-builder --mac",
     "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
@@ -69,34 +69,18 @@
   "build": {
     "appId": "com.ahmedhisham.sawtak",
     "productName": "Sawtak",
+    "afterPack": "scripts/adhoc-sign.cjs",
     "files": [
       "electron/**/*",
       ".next/**/*",
       "public/**/*",
       "build/icon.png",
-      "package.json",
-      "node_modules/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "prisma",
-        "to": "prisma",
-        "filter": [
-          "schema.prisma"
-        ]
-      },
-      {
-        "from": "tts-engine",
-        "to": "tts-engine",
-        "filter": [
-          "**/*.py",
-          "requirements.txt",
-          "!venv/**"
-        ]
-      }
+      "next.config.mjs",
+      "package.json"
     ],
     "mac": {
       "icon": "build/icon.icns",
+      "identity": null,
       "category": "public.app-category.productivity",
       "target": [
         "dmg"
@@ -110,7 +94,14 @@
     },
     "directories": {
       "output": "dist-electron"
-    }
+    },
+    "asar": false,
+    "extraResources": [
+      {
+        "from": "node_modules/.prisma",
+        "to": "app/node_modules/.prisma"
+      }
+    ]
   },
   "description": "صوتك — Egyptian Arabic text-to-speech and voice cloning, running entirely on your own machine."
 }

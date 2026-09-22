@@ -25,6 +25,13 @@ const WEB_PORT = Number(process.env.TTS_WEB_PORT || 3000);
 const ENGINE_READY_TIMEOUT_MS = 10 * 60 * 1000;
 const WEB_READY_TIMEOUT_MS = 90 * 1000;
 
+/**
+ * Where a user who followed the published install instructions put the project.
+ * Keep this in sync with the `git clone` line on the landing page — they are
+ * two halves of the same contract.
+ */
+const DEFAULT_DATA_ROOT = path.join(require('node:os').homedir(), 'sawtak');
+
 const children = new Set();
 
 function log(...args) {
@@ -113,13 +120,77 @@ function stopAll() {
   }, 4000);
 }
 
-/** Resolve paths that differ between `npm run electron` and a packaged .app. */
+/**
+ * Where the compiled web app lives — the directory holding `.next`,
+ * `node_modules` and `package.json`.
+ *
+ * Identical in both modes as it happens: in development this file is at
+ * <repo>/electron/, and a packaged build (asar disabled, because `next start`
+ * and Prisma's native engines cannot be executed from inside an archive) puts
+ * the same tree at Contents/Resources/app/.
+ */
 function resolveRoot() {
-  // In development this file lives at <repo>/electron/; packaged, the app's
-  // resources are unpacked next to the executable.
-  const devRoot = path.resolve(__dirname, '..');
-  if (fs.existsSync(path.join(devRoot, 'package.json'))) return devRoot;
-  return process.resourcesPath;
+  return path.resolve(__dirname, '..');
+}
+
+/**
+ * Where the *data* lives: the Python virtualenv, the SQLite database, and
+ * `storage/` with every generated clip and voice reference.
+ *
+ * This is deliberately NOT inside the .app. The virtualenv cannot go in one —
+ * `venv/bin/python` is a symlink to a uv-managed interpreter outside the repo,
+ * and a venv records absolute paths, so copying it into the bundle produces a
+ * build that only works on the machine that made it. The database and
+ * `storage/` stay out for a better reason: `VoiceProfile.referenceAudioPath`
+ * holds absolute paths, so moving them would orphan every voice the user has
+ * already recorded.
+ *
+ * Candidates are tried in order and **each one is checked on disk**, because
+ * the most specific of them is also the least portable: the build machine's
+ * own path, written into `electron/data-root.json` by
+ * scripts/prepare-desktop-build.mjs. Returning that unvalidated is what made
+ * an installed .app look for the venv inside the *packager's* home directory
+ * on someone else's Mac, and fail with their username in the error. So the
+ * baked path now has to exist to win, and DEFAULT_DATA_ROOT — the location the
+ * published install instructions tell people to clone into — catches everyone
+ * else. SAWTAK_DATA_ROOT overrides the lot.
+ */
+function dataRootCandidates() {
+  return [
+    process.env.SAWTAK_DATA_ROOT,
+    // In development this file sits at <repo>/electron/, so the repo is right here.
+    path.resolve(__dirname, '..'),
+    readBakedDataRoot(),
+    DEFAULT_DATA_ROOT,
+  ].filter(Boolean);
+}
+
+function readBakedDataRoot() {
+  try {
+    const baked = JSON.parse(fs.readFileSync(path.join(__dirname, 'data-root.json'), 'utf8'));
+    return baked.dataRoot || null;
+  } catch {
+    return null;
+  }
+}
+
+/** A data root is only real if the engine's interpreter is actually in it. */
+function hasEngineVenv(root) {
+  return fs.existsSync(path.join(root, 'tts-engine', 'venv', 'bin', 'python'));
+}
+
+function resolveDataRoot() {
+  // An explicit override is obeyed even when it is wrong, so the failure names
+  // the path the user chose rather than silently using a different one.
+  if (process.env.SAWTAK_DATA_ROOT) return process.env.SAWTAK_DATA_ROOT;
+
+  const candidates = dataRootCandidates();
+  const found = candidates.find(hasEngineVenv);
+  if (found) return found;
+
+  // Nothing is set up yet. Report the documented location, since that is the
+  // one the setup instructions the user was given will create.
+  return DEFAULT_DATA_ROOT;
 }
 
 module.exports = {
@@ -132,5 +203,7 @@ module.exports = {
   start,
   stopAll,
   resolveRoot,
+  resolveDataRoot,
+  DEFAULT_DATA_ROOT,
   log,
 };

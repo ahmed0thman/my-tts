@@ -2,7 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-const STORAGE_ROOT = path.join(process.cwd(), 'storage');
+/**
+ * `storage/` sits next to the project, not next to the server.
+ *
+ * In development those are the same directory and `process.cwd()` is right. In
+ * the packaged desktop app they are not: the Next server runs from inside
+ * Sawtak.app, while storage/ stays in the project folder alongside the Python
+ * engine and the database — the engine derives its own paths the same way, and
+ * `VoiceProfile.referenceAudioPath` holds absolute paths into it. Without the
+ * override every clip in the history 404s in the built app.
+ */
+const STORAGE_ROOT = path.join(process.env.SAWTAK_DATA_ROOT || process.cwd(), 'storage');
 
 /**
  * Callers hand us the path in whichever shape they happen to hold:

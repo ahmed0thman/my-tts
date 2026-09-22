@@ -82,3 +82,7 @@ build/icons/*
 
 # Electron build output
 dist-electron/
+
+# Written at build time by scripts/prepare-desktop-build.mjs — holds an
+# absolute path that is only meaningful on the machine that built the app.
+electron/data-root.json

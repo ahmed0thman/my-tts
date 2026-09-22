@@ -29,10 +29,15 @@ const {
   start,
   stopAll,
   resolveRoot,
+  resolveDataRoot,
+  DEFAULT_DATA_ROOT,
   log,
 } = require('./processes');
 
 const ROOT = resolveRoot();
+// The engine, the database and storage/ live outside the .app — see
+// resolveDataRoot() for why.
+const DATA_ROOT = resolveDataRoot();
 // Packaged builds always serve the compiled app. TTS_FORCE_PROD lets the
 // production path be exercised from a checkout, which is otherwise only
 // reachable by building a full .app.
@@ -169,27 +174,35 @@ function createMainWindow() {
 }
 
 function pythonBinary() {
-  const venv = path.join(ROOT, 'tts-engine', 'venv', 'bin', 'python');
+  const venv = path.join(DATA_ROOT, 'tts-engine', 'venv', 'bin', 'python');
   if (fs.existsSync(venv)) return venv;
   return null;
 }
 
 async function startEngine() {
   if (await isPortOpen(ENGINE_PORT)) {
-    say('لقينا المحرك شغّال بالفعل');
+    say('لقينا النموذج شغّال بالفعل');
     return;
   }
 
   const python = pythonBinary();
   if (!python) {
+    // Written in Arabic and as shell lines the user can paste, because this is
+    // the first thing a brand-new install hits: the .app ships without the
+    // Python engine, and this dialog is the only place that says so.
     throw new Error(
-      `Python environment not found at tts-engine/venv.\n\nRun ./scripts/setup.sh once to create it.`
+      `مفيش نموذج صوت متظبط على الجهاز.\n\n` +
+      `التطبيق بيدوّر على:\n${path.join(DATA_ROOT, 'tts-engine', 'venv')}\n\n` +
+      `افتح الترمينال والصق:\n\n` +
+      `git clone -b voicetut https://github.com/ahmed0thman/my-tts.git ${DEFAULT_DATA_ROOT}\n` +
+      `cd ${DEFAULT_DATA_ROOT} && ./scripts/setup.sh\n\n` +
+      `ولو ظبّطته في مكان تاني، شغّل التطبيق و SAWTAK_DATA_ROOT مظبوطة عليه.`
     );
   }
 
-  say('بنشغّل محرك الصوت...');
+  say('بنشغّل نموذج الصوت...');
   start('engine', python, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(ENGINE_PORT)], {
-    cwd: path.join(ROOT, 'tts-engine'),
+    cwd: path.join(DATA_ROOT, 'tts-engine'),
     onExit: (code) => {
       if (!quitting && code !== 0) fail(`The speech engine stopped unexpectedly (exit ${code}).`);
     },
@@ -200,7 +213,7 @@ async function startEngine() {
       say(`بنحمّل النموذج... (${seconds} ثانية)`);
     }
   });
-  say('المحرك جاهز');
+  say('النموذج جاهز');
 }
 
 async function startWeb() {
@@ -210,13 +223,29 @@ async function startWeb() {
   }
 
   say('بنشغّل الواجهة...');
-  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+  // Electron's own binary, run as plain Node. A packaged app cannot assume a
+  // `node` or `npx` on PATH — a double-clicked .app does not inherit the
+  // user's shell environment at all — and Electron already ships the runtime.
+  const nextBin = path.join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
   // `next start` needs a production build; in development `next dev` is both
   // faster to boot and what the repo is set up for.
-  const args = isDev ? ['next', 'dev', '--port', String(WEB_PORT)] : ['next', 'start', '--port', String(WEB_PORT)];
-  start('web', npx, args, {
+  const args = [nextBin, isDev ? 'dev' : 'start', '--port', String(WEB_PORT)];
+  start('web', process.execPath, args, {
     cwd: ROOT,
-    env: { NODE_ENV: isDev ? 'development' : 'production' },
+    env: {
+      ELECTRON_RUN_AS_NODE: '1',
+      NODE_ENV: isDev ? 'development' : 'production',
+      // Production `next start` reads .env from its cwd, and the packaged app
+      // has none — the connection string has to be handed over explicitly,
+      // and as an absolute path, since the relative form resolves against
+      // prisma/.
+      DATABASE_URL: `file:${path.join(DATA_ROOT, 'prisma', 'namaa.db')}`,
+      // The audio route serves storage/ from here rather than from its own
+      // cwd, which inside the .app is the bundle and holds no storage/.
+      SAWTAK_DATA_ROOT: DATA_ROOT,
+      NEXT_TELEMETRY_DISABLED: '1',
+    },
     onExit: (code) => {
       if (!quitting && code !== 0) fail(`The app server stopped unexpectedly (exit ${code}).`);
     },
