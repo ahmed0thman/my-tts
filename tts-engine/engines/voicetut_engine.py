@@ -228,6 +228,7 @@ class VoiceTutEngine(TTSEngine):
 
         kwargs: Dict[str, Any] = {}
         if reference_audio and os.path.exists(reference_audio):
+            self._check_reference_length(reference_audio)
             kwargs["ref_audio"] = reference_audio
             # Supplying the transcript is not just for quality: with `ref_text`
             # absent the library transcribes the clip with Whisper
@@ -268,6 +269,40 @@ class VoiceTutEngine(TTSEngine):
         tensor = torch.from_numpy(np.concatenate(pieces)).float().squeeze()
         logger.info(f"  -> {tensor.shape[-1] / SAMPLE_RATE:.1f}s of audio")
         return tensor, SAMPLE_RATE, None
+
+    @staticmethod
+    def _check_reference_length(path: str) -> None:
+        """Refuse a reference longer than the model's window.
+
+        OmniVoice conditions on (reference audio + reference transcript) and
+        continues the sequence, so an over-long reference does not merely
+        degrade: the model starts **speaking the reference back** and drops
+        the head of the requested text. Measured here on a 16.2 s clip, twice,
+        against a 220-character prompt: both takes opened with the reference's
+        own words ("يسعدني أقولك") and both lost the prompt's first sentence
+        entirely. The same clip cut to 8.9 s reproduced the prompt verbatim.
+
+        The library warns but does not truncate when `ref_text` is supplied —
+        deliberately, so that audio and transcript stay aligned — and we cannot
+        truncate here either, because cutting the audio without cutting the
+        transcript to match is what causes the drift in the first place. So the
+        only honest option is to stop, and say which clip and by how much.
+        """
+        import torchaudio
+
+        try:
+            info = torchaudio.info(path)
+            seconds = info.num_frames / info.sample_rate
+        except Exception:  # unreadable here means unreadable downstream too
+            return
+
+        if seconds > MAX_REFERENCE_SECONDS:
+            raise ValueError(
+                f"عيّنة الصوت طولها {seconds:.1f} ثانية، والنموذج بيشتغل صح "
+                f"لحد {MAX_REFERENCE_SECONDS:.0f} ثواني بس. العيّنة الأطول من كده "
+                "بتخلّي النموذج يعيد كلام العيّنة نفسها وميقراش أول النص. "
+                "سجّل عيّنة من ٣ لـ ٩ ثواني، أو اقصّ دي واكتب نصّها من تاني."
+            )
 
     # -- capability declaration -------------------------------------------
 

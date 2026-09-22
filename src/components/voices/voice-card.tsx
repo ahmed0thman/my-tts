@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { AudioPlayer } from '@/components/generation/audio-player';
+import { useModels } from '@/hooks/use-models';
 import { formatDuration, formatDate } from '@/lib/utils';
 import { Trash2, Star, CheckCircle, FileText, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -32,6 +33,24 @@ export function VoiceCard({ profile }: { profile: any }) {
 
   // SILMA needs the transcription to clone; a profile without one cannot generate.
   const needsReferenceText = !profile.referenceText?.trim();
+
+  // A clip longer than the model's reference window makes it recite the
+  // reference instead of the requested text, so an over-long profile is
+  // broken rather than merely suboptimal — say so on the card, because the
+  // failure is otherwise only visible in the generated audio. The cap comes
+  // from the engine's own `describe()`, so it follows whichever model is
+  // registered.
+  const { data: modelData } = useModels();
+  const referenceCap = modelData?.models.reduce<number | null>(
+    (shortest, model) =>
+      model.maxReferenceSeconds !== null &&
+      (shortest === null || model.maxReferenceSeconds < shortest)
+        ? model.maxReferenceSeconds
+        : shortest,
+    null,
+  );
+  const isTooLong =
+    referenceCap != null && profile.duration != null && profile.duration > referenceCap;
 
   const handleSaveText = () => {
     const formData = new FormData();
@@ -84,6 +103,15 @@ export function VoiceCard({ profile }: { profile: any }) {
             >
               <AlertTriangle className="h-3 w-3" />
               ناقص نص العينة
+            </Badge>
+          )}
+          {isTooLong && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-destructive/40 bg-destructive/10 text-[10px] text-destructive"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              أطول من {referenceCap} ثواني — سجّل واحدة أقصر
             </Badge>
           )}
         </div>

@@ -16,8 +16,23 @@ def get_audio_duration(file_path: str) -> float:
     info = torchaudio.info(file_path)
     return info.num_frames / info.sample_rate
 
-def validate_audio_file(file_path: str) -> dict:
-    """Validates an audio file (format, duration, sample rate)."""
+#: Shorter than this and there is not enough speech to characterise a voice.
+MIN_REFERENCE_SECONDS = 3.0
+
+#: Fallback cap, used only when the caller does not know which model the clip
+#: is for. The real limit belongs to the model: each engine publishes its own
+#: `maxReferenceSeconds`, and callers should pass it. Exceeding a model's cap is
+#: not a quality nicety — on OmniVoice it makes the model recite the reference
+#: instead of the requested text.
+DEFAULT_MAX_REFERENCE_SECONDS = 30.0
+
+
+def validate_audio_file(file_path: str, max_seconds: float = DEFAULT_MAX_REFERENCE_SECONDS) -> dict:
+    """Validates an audio file (format, duration, sample rate).
+
+    `max_seconds` is the selected model's reference window; pass it, because a
+    clip that is fine for one engine silently breaks another.
+    """
     try:
         info = torchaudio.info(file_path)
         duration = info.num_frames / info.sample_rate
@@ -25,9 +40,12 @@ def validate_audio_file(file_path: str) -> dict:
         is_valid = True
         errors = []
         
-        if duration < 3.0 or duration > 30.0:
+        if duration < MIN_REFERENCE_SECONDS or duration > max_seconds:
             is_valid = False
-            errors.append(f"Duration {duration:.2f}s is out of range (3-30s).")
+            errors.append(
+                f"Duration {duration:.2f}s is out of range "
+                f"({MIN_REFERENCE_SECONDS:.0f}-{max_seconds:.0f}s)."
+            )
             
         return {
             "is_valid": is_valid,

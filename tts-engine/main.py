@@ -22,6 +22,7 @@ import model_registry
 import progress
 from model_manager import ModelManager
 from audio_utils import (
+    DEFAULT_MAX_REFERENCE_SECONDS,
     generate_unique_filename,
     save_uploaded_file,
     validate_audio_file,
@@ -153,9 +154,31 @@ async def generate_audio(
         
         return StreamingResponse(iterfile(), media_type="audio/wav", headers=headers)
         
+    except ValueError as e:
+        # An engine adapter raises ValueError for a request it can see is
+        # wrong before it runs — an over-long reference clip, for instance.
+        # That is the caller's problem to fix, not a server fault, and the
+        # message is written for the user, so it travels as a 400.
+        logger.warning(f"Rejected generation: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error during generation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+def _reference_cap() -> float:
+    """The shortest reference window among the registered models.
+
+    References are stored once and used by whichever model is selected later,
+    so the only clip guaranteed to work is one that fits every model on the
+    board. With a single model registered this is simply that model's cap.
+    """
+    caps = [
+        m["maxReferenceSeconds"]
+        for m in model_registry.describe_all(model_manager.device)
+        if m.get("maxReferenceSeconds")
+    ]
+    return min(caps) if caps else DEFAULT_MAX_REFERENCE_SECONDS
+
 
 @app.post("/api/upload-reference")
 async def upload_reference(file: UploadFile = File(...)):
@@ -167,7 +190,11 @@ async def upload_reference(file: UploadFile = File(...)):
     
     await save_uploaded_file(file, filepath)
     
-    validation = validate_audio_file(filepath)
+    # Validate against the reference window of the model this board actually
+    # renders with. A 16 s clip passes a generic 30 s check and then produces
+    # contaminated audio on OmniVoice, which is far worse than being refused
+    # at upload time.
+    validation = validate_audio_file(filepath, max_seconds=_reference_cap())
     if not validation["is_valid"]:
         os.remove(filepath)
         raise HTTPException(status_code=400, detail=f"Invalid audio: {', '.join(validation['errors'])}")

@@ -149,8 +149,19 @@ export async function generateSpeech(params: GenerateSpeechParams): Promise<Gene
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to generate speech: ${error}`);
+    // FastAPI puts the message in `detail`, and for a 400 that message is
+    // written for the user in Arabic — it has to reach the toast intact
+    // rather than as a JSON blob behind an English prefix.
+    const body = await response.text();
+    let detail = body;
+    try {
+      detail = JSON.parse(body).detail ?? body;
+    } catch {
+      // Not JSON; the raw body is the best we have.
+    }
+    throw new Error(
+      response.status === 400 ? detail : `Failed to generate speech: ${detail}`,
+    );
   }
 
   const audioPath = response.headers.get('X-Audio-Path') || '';

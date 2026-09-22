@@ -9,9 +9,17 @@
 /** The model's native rate; matching it avoids a resample on the Python side. */
 export const TARGET_SAMPLE_RATE = 24000;
 
-/** The engine rejects references outside this window. */
+/**
+ * The engine rejects references outside this window.
+ *
+ * The upper bound is the registered model's `maxReferenceSeconds`, not a
+ * generic "long enough" figure. It used to be 30, from the NAMAA models, which
+ * had no cap at all; VoiceTut caps at 10, and past that it recites the
+ * reference instead of the requested text. The recorder must not be able to
+ * produce a clip the model cannot use, so this is a hard stop.
+ */
 export const MIN_DURATION = 3;
-export const MAX_DURATION = 30;
+export const MAX_DURATION = 10;
 
 /** Below this the recording is treated as silence when trimming the edges. */
 const SILENCE_THRESHOLD = 0.012;

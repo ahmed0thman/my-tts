@@ -8,15 +8,28 @@ import fs from 'fs/promises';
 import path from 'path';
 import { DEFAULT_MODEL_ID } from '@/lib/models';
 
-/** Whether the chosen model clones from clip + transcription, or audio alone. */
-async function modelRequiresReferenceText(modelId: string): Promise<boolean> {
+/**
+ * The chosen model's cloning contract: whether it needs the transcription as
+ * well as the clip, and how long a clip it can actually use.
+ *
+ * Both come from the engine's own `describe()` rather than being restated
+ * here, so re-registering a model with a different cap needs no change in the
+ * frontend.
+ */
+async function modelCloningContract(
+  modelId: string,
+): Promise<{ requiresReferenceText: boolean; maxReferenceSeconds: number | null }> {
   try {
     const { models } = await listModels();
-    return models.find((m) => m.id === modelId)?.requiresReferenceText ?? false;
+    const model = models.find((m) => m.id === modelId);
+    return {
+      requiresReferenceText: model?.requiresReferenceText ?? false,
+      maxReferenceSeconds: model?.maxReferenceSeconds ?? null,
+    };
   } catch {
     // If the engine is unreachable the generate call will fail anyway; do not
     // block on this lookup.
-    return false;
+    return { requiresReferenceText: false, maxReferenceSeconds: null };
   }
 }
 
@@ -67,11 +80,26 @@ export async function createGeneration(input: FormData | CreateGenerationInput) 
         where: { id: validatedData.voiceProfileId },
       });
       if (profile?.referenceAudioPath) {
-        const needsText = await modelRequiresReferenceText(validatedData.modelId);
-        if (needsText && !profile.referenceText?.trim()) {
+        const { requiresReferenceText, maxReferenceSeconds } = await modelCloningContract(
+          validatedData.modelId,
+        );
+        if (requiresReferenceText && !profile.referenceText?.trim()) {
           return {
             success: false,
             error: `الصوت "${profile.name}" ناقصه نص العينة، والنموذج المختار محتاجه. افتحه من صفحة الأصوات واكتب اللي اتقال في التسجيل.`,
+          };
+        }
+        // The engine refuses an over-long clip too, but only after the request
+        // has travelled and a PENDING row exists. Catching it here costs one
+        // lookup and gives the user the number that is wrong.
+        if (
+          maxReferenceSeconds !== null &&
+          profile.duration !== null &&
+          profile.duration > maxReferenceSeconds
+        ) {
+          return {
+            success: false,
+            error: `الصوت "${profile.name}" طوله ${profile.duration.toFixed(1)} ثانية، والنموذج بيشتغل صح لحد ${maxReferenceSeconds} ثواني. العيّنة الأطول بتخلّي النموذج يعيد كلام العيّنة نفسها وميقراش أول النص — سجّل عيّنة أقصر من صفحة الأصوات.`,
           };
         }
         referenceAudioPath = profile.referenceAudioPath;

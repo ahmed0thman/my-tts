@@ -20,8 +20,12 @@ import {
 import { toast } from 'sonner';
 
 /** The range that produces the best clones — long enough to carry prosody, short enough to stay consistent. */
-const IDEAL_MIN = 12;
-const IDEAL_MAX = 22;
+// The band the model clones best from. VoiceTut's own guidance is 3-10s, and
+// a 9s cut of a 23s clip reproduced this speaker's delivery where the full
+// clip carried only the timbre. The top of the band sits below MAX_DURATION so
+// a reader who runs slightly long still lands inside the window.
+const IDEAL_MIN = 5;
+const IDEAL_MAX = 9;
 
 interface VoiceRecorderProps {
   /** Fires whenever a finished WAV is ready, or null when the take is discarded. */

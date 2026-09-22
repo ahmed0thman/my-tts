@@ -62,7 +62,8 @@
   - `X-Seed`: Seed used, when the model exposes one
   - `X-Model-Id`: Which engine rendered it
 - `GET /api/health` reports `model_loaded`, `device`, `sample_rate` and `active_model`. `GET /api/model-info` adds the full registry.
-- Reference audio files must be clean WAV files between 3 and 30 seconds (`validate_audio_file`).
+- Reference audio files must be clean WAV files at least 3 seconds long and no longer than the **registered models' shortest `maxReferenceSeconds`**. `validate_audio_file(path, max_seconds=...)` takes the cap as a parameter — `DEFAULT_MAX_REFERENCE_SECONDS = 30.0` is only the fallback for callers that do not know the model. `/api/upload-reference` passes `_reference_cap()`, the minimum over the registry, because a reference is stored once and used by whichever model is selected later.
+- `voicetut_engine._check_reference_length()` re-checks at generation time and raises `ValueError` above the cap; `/api/generate` maps `ValueError` to **400**, not 500, since the message is written for the user in Arabic and travels to the toast via `detail`. This is deliberate rather than a silent truncation: the library does not truncate when `ref_text` is supplied, and cutting the audio without cutting the transcript to match is itself the cause of the drift.
 
 ## Output Handling
 - The vocoder occasionally returns peaks above full scale, which `torchaudio.save` hard-clips into audible crackle. `normalize_peak()` in `audio_utils.py` scales the waveform to 0.99 only when it exceeds 1.0, leaving quiet audio untouched so loudness stays comparable between generations.
