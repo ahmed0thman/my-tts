@@ -19,6 +19,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { VolumeHighIcon, FlashIcon } from '@hugeicons/core-free-icons';
 import { useCreateGeneration } from '@/hooks/use-generations';
 import { toast } from 'sonner';
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 type GenerateFormValues = z.infer<typeof generateSchema>;
 
@@ -43,7 +44,7 @@ export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
     defaultValues: {
       text: '',
       voiceProfileId: 'default',
-      modelId: 'silma',
+      modelId: DEFAULT_MODEL_ID,
       params: {},
       outputDir: '',
     },

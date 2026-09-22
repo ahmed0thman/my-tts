@@ -27,7 +27,7 @@
 
 ## Model Selection & Parameters (schema-driven)
 - The engine is the source of truth for what knobs exist. `GET /api/models` → `src/actions/models.ts` → `useModels()` (`src/hooks/use-models.ts`, `staleTime` 5 min since the registry is static for the life of the engine process).
-- `src/components/generation/model-selector.tsx` binds the `modelId` field, remembers the choice in `localStorage` under `namaa:model-id`, and shows the model's dialect plus its capability badges (`محتاج نص العينة`, `العينة ≤ 8.05s`) and repo.
+- `src/components/generation/model-selector.tsx` binds the `modelId` field, remembers the choice in `localStorage` under `namaa:model-id`, and shows the model's dialect plus its capability badges (`محتاج نص العينة`, `العينة ≤ 10s`) and repo. The restore effect checks a saved id against the models that actually exist, so unregistering a model does not leave a dead selection.
 - `src/components/generation/model-params.tsx` renders **one Slider per entry in the active model's `params` array** — `{key, label, min, max, step, default, format?, integer?}`. Never hardcode a slider for a specific model here.
 - Parameter names do not transfer between models, so changing the model resets `params` to `defaultParamsFor(next)` rather than carrying stale keys across.
 - `generateSchema` therefore validates `params` as `z.record(z.string(), z.coerce.number())`; ranges are enforced by the engine, not duplicated in Zod. Adding a knob to an engine's `describe()` is the whole change.
@@ -54,6 +54,12 @@
 - Values are snapped to the parameter's own `step` and rounded, because float accumulation over a 0.05 step (1.3500000000000003) drifts off the slider's ticks.
 - Used by the studio's persona chips (`text-input.tsx`) and the presets page's suggestions. `modelSupportsTone()` hides a suggestion the active model cannot express, rather than rendering one that would do nothing.
 - Adding a knob to an engine means adding one line to `PARAM_AXES` if it should respond to tones; leaving it out is safe — it just keeps its default.
+
+## Model-id constants
+- `src/lib/models.ts` holds two ids that used to both be spelled `'silma'` inline in 12 places:
+  - `DEFAULT_MODEL_ID` — what to select when the user has not chosen and `useModels()` has not resolved. Form defaults, the selector, `createGeneration`, `createPreset`, `tts-client`.
+  - `LEGACY_MODEL_ID` — what a `Generation`/`Preset` row with no `modelId` was rendered by, back before the column existed. **Historical; never change it.**
+- They are equal only by accident and move independently: unregistering a model changes the first, and touching the second would relabel existing history. Prefer `useModels().data.default` — the engine is the real source of truth.
 
 ## Progress & Long Requests
 - `GET /api/progress` (engine) → `src/app/api/progress/route.ts` (proxy) → `useEngineProgress()` → `generation-progress.tsx`, polled once a second while a generation is pending.

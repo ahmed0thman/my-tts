@@ -18,6 +18,7 @@ const MODEL_LABELS: Record<string, string> = {
   'namaa-saudi': 'NAMAA — سعودي',
   'namaa-egyptian': 'NAMAA — مصري',
   'masri-higgs': 'Masri Higgs — مصري',
+  voicetut: 'VoiceTut — مصري',
 };
 
 const PARAM_LABELS: Record<string, string> = {
@@ -28,6 +29,8 @@ const PARAM_LABELS: Record<string, string> = {
   cfgWeight: 'الإيقاع',
   temperature: 'التنوّع',
   topK: 'الاحتمالات',
+  guidanceScale: 'الالتزام',
+  numStep: 'الخطوات',
 };
 
 export function GenerationList() {

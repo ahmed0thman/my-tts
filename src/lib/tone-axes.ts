@@ -38,6 +38,10 @@ const PARAM_AXES: Record<string, AxisMapping> = {
   cfgWeight: { axis: 'pace', direction: -1 },
   exaggeration: { axis: 'expressiveness', direction: 1 },
   temperature: { axis: 'expressiveness', direction: 1 },
+  // VoiceTut (OmniVoice). `speed` above already covers its pacing knob —
+  // the mapping is by parameter key, so it is shared with SILMA.
+  guidanceScale: { axis: 'fidelity', direction: 1 },
+  numStep: { axis: 'fidelity', direction: 1 },
 };
 
 /** Which axes the model can actually express, given the knobs it declares. */

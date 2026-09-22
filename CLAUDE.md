@@ -1,7 +1,7 @@
 # CLAUDE.md — Arabic TTS Control Board
 
 ## Project Overview
-A production-grade local control board for text-to-speech and zero-shot voice cloning across **four switchable Arabic models**. Built with Next.js 15, Tailwind CSS v4, Shadcn/ui, React Query v5, React Hook Form v7, Prisma v6, and SQLite, communicating with a Python FastAPI inference sidecar.
+A production-grade local control board for text-to-speech and zero-shot voice cloning across **five switchable Arabic models**. Built with Next.js 15, Tailwind CSS v4, Shadcn/ui, React Query v5, React Hook Form v7, Prisma v6, and SQLite, communicating with a Python FastAPI inference sidecar.
 
 | id | Model | Dialect | Runtime |
 |---|---|---|---|
@@ -9,6 +9,21 @@ A production-grade local control board for text-to-speech and zero-shot voice cl
 | `namaa-saudi` | [NAMAA-Space/NAMAA-Saudi-TTS](https://huggingface.co/NAMAA-Space/NAMAA-Saudi-TTS) | سعودي / نجدي | Chatterbox fine-tune |
 | `namaa-egyptian` | [NAMAA-Space/NAMAA-Egyptian-TTS](https://huggingface.co/NAMAA-Space/NAMAA-Egyptian-TTS) | مصري | Chatterbox fine-tune |
 | `masri-higgs` | [ehabnegm/masri-higgs-v3-egyptian-tts](https://huggingface.co/ehabnegm/masri-higgs-v3-egyptian-tts) | مصري | Higgs Audio v3 — Qwen3-4B + codec, 4B |
+| `voicetut` | [mohammedaly22/VoiceTut-TTS](https://huggingface.co/mohammedaly22/VoiceTut-TTS) | مصري | OmniVoice — Qwen3-0.6B + Higgs codec, 0.6B |
+
+> **This branch (`voicetut`) registers `voicetut` only.** `MODEL_IDS` in
+> `tts-engine/model_registry.py` lists one id, so that is all the dropdown
+> shows and all `/api/generate` accepts. The other four adapters are still on
+> disk and still work — re-list one by adding its id back. They are unlisted
+> rather than deleted because an unlisted model costs nothing (ModelManager
+> keeps one model resident anyway) while Higgs one click away costs a 210 s
+> load and 8.7 GB.
+>
+> Two ids that used to both be spelled `'silma'` are now separate constants in
+> `src/lib/models.ts`: `DEFAULT_MODEL_ID` (what to select when nothing is
+> chosen) and `LEGACY_MODEL_ID` (what a stored row with no `modelId` came
+> from). They moved independently the moment the registry changed — keep them
+> apart.
 
 ## Multi-Model Architecture
 - Each backend is an adapter under `tts-engine/engines/` implementing `TTSEngine` (`load`, `generate`, `unload`, capability declaration).
@@ -17,16 +32,17 @@ A production-grade local control board for text-to-speech and zero-shot voice cl
 - Parameter names differ per model, so they travel as a JSON blob (`params`) end to end and are stored in `Generation.params` / `Preset.params`. **Never reintroduce per-model columns.**
 
 ## Voice Cloning Contract
-All four models clone zero-shot from a reference clip, and they differ:
+All five models clone zero-shot from a reference clip, and they differ:
 - **SILMA** needs the clip **plus its transcription** (`ref_text`), and silently truncates references over **8.05s** — a truncated clip makes it discard `ref_text` and re-transcribe with Whisper (a 1.6GB download).
 - **NAMAA (both)** clone from audio alone; `referenceText` is ignored and there is no length cap.
 - **Masri Higgs clones, but unstably.** It takes the clip **plus its transcription** and uses the first **6 s** (150 frames at 25 Hz), exactly as the model's own serving script does. The checkpoint is a LoRA merge over 98 h of a *single* narrator, so it pulls toward his timbre and the reference wins only some of the time; the model card says cloning is "inherited from Higgs v3" but was never re-benchmarked after the fine-tune. Take-to-take drift is large — two takes sharing one reference came out 26 Hz apart in median F0 — so **a single A/B sample cannot tell you whether a reference landed.** Judge it across several takes, and lower `temperature`/`topK` to trade variety for adherence.
+- **VoiceTut is the one to reach for when the goal is the user's own voice.** It needs the clip **plus its transcription**, and wants **3–10 s**: confirmed by ear here, a 9 s cut of a 23 s clip reproduced the speaker's delivery where the full clip reproduced only the timbre, and it generated ~35% faster (RTF 2.51x vs 3.88x). The library warns above 20 s. It does *not* truncate when `ref_text` is supplied — deliberately, so audio and transcript stay aligned — so an over-long clip is used whole and quality suffers silently. With no `ref_text` it transcribes the clip with Whisper large-v3-turbo (1.6 GB), the same trap SILMA has.
 - `VoiceProfile.referenceText` is stored either way; `createGeneration` enforces it only when the selected model declares `requiresReferenceText`.
 - The record-your-voice flow fills it in automatically (the user reads a known script, `src/lib/reference-script.ts`); the upload flow asks for it.
 
 ## Architecture
 - **Web App**: Next.js 15 (App Router), React 19, TypeScript strict mode, RTL Arabic (Cairo font).
-- **TTS Engine**: Python **3.11** FastAPI server running all four models on Apple Silicon MPS (Metal). 3.11 is mandatory — silma-tts pins `numpy<=1.26.4`, which has no wheels for 3.12/3.13.
+- **TTS Engine**: Python **3.11** FastAPI server running all five models on Apple Silicon MPS (Metal). 3.11 is mandatory — silma-tts pins `numpy<=1.26.4`, which has no wheels for 3.12/3.13.
 - **Database**: **SQLite** at `prisma/namaa.db` via Prisma ORM (`prisma/schema.prisma`). No server and no Docker — the container's VM held ~2GB that the 4B Higgs model needs. Prisma 6.19 supports `enum` and `Json` on SQLite, so only the datasource provider changed.
 - **Communication**: Next.js Server Actions call FastAPI (`http://localhost:8000/api/*`) via `src/lib/tts-client.ts`.
 - **Audio Storage**: Persistent filesystem storage in `storage/audio/` and `storage/voice-samples/`, streamed via Next.js route `src/app/api/audio/[...path]/route.ts`.

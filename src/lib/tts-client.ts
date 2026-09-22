@@ -1,4 +1,5 @@
 import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from 'undici';
+import { DEFAULT_MODEL_ID } from './models';
 
 const TTS_ENGINE_URL = process.env.TTS_ENGINE_URL || 'http://localhost:8000';
 
@@ -131,7 +132,7 @@ export async function generateSpeech(params: GenerateSpeechParams): Promise<Gene
   if (params.voiceProfilePath) {
     formData.append('voice_profile_path', params.voiceProfilePath);
   }
-  formData.append('model_id', params.modelId ?? 'silma');
+  formData.append('model_id', params.modelId ?? DEFAULT_MODEL_ID);
   if (params.referenceText) {
     formData.append('reference_text', params.referenceText);
   }

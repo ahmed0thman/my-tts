@@ -12,7 +12,7 @@ Starts both development servers concurrently with automated cleanup on exit (Ctr
 1. **FastAPI TTS Sidecar**:
    - Preflight: checks `venv/bin/uvicorn` is executable and `import silma_tts` succeeds, aborting with a pointer to `setup.sh` if not.
    - Runs `venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000`.
-   - Warms the **default model (`silma`)** on startup via a background task; the other two load on first use.
+   - Warms the **default model (`voicetut`, ~4–7 s warm)** on startup via a background task. Note `uvicorn --reload` watches the engine directory, so editing an adapter restarts the process and drops the resident model.
 2. **Next.js 15 Web Application**:
    - Runs `npm run dev` with Turbopack on port 3000.
 

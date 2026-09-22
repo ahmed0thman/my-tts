@@ -24,6 +24,7 @@ import { Plus, Trash2, Settings2, Sparkles, Check, Cpu } from 'lucide-react';
 import { paramsForTone, modelSupportsTone, type Tone } from '@/lib/tone-axes';
 import type { TtsModel } from '@/lib/tts-client';
 import { toast } from 'sonner';
+import { DEFAULT_MODEL_ID, LEGACY_MODEL_ID } from '@/lib/models';
 
 /** The studio remembers the last model here; start from the same one. */
 const MODEL_STORAGE_KEY = 'namaa:model-id';
@@ -60,7 +61,7 @@ export default function PresetsPage() {
   const { mutate: deletePreset } = useDeletePreset();
 
   const models = useMemo(() => modelsData?.models ?? [], [modelsData]);
-  const [modelId, setModelId] = useState<string>('silma');
+  const [modelId, setModelId] = useState<string>(DEFAULT_MODEL_ID);
   const activeModel = models.find((m) => m.id === modelId);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -95,7 +96,7 @@ export default function PresetsPage() {
 
   // A preset name is unique per model, so the same name may exist for another.
   const savedForModel = new Set(
-    (presets ?? []).filter((p: any) => (p.modelId ?? 'silma') === modelId).map((p: any) => p.name),
+    (presets ?? []).filter((p: any) => (p.modelId ?? LEGACY_MODEL_ID) === modelId).map((p: any) => p.name),
   );
 
   const applicableTones = RECOMMENDED_TONES.filter((preset) =>
@@ -272,7 +273,7 @@ export default function PresetsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="truncate font-bold tracking-tight">{preset.name}</h3>
                       <Badge variant="outline" className="shrink-0 border-primary/30 text-[10px] text-primary">
-                        {modelLabel(preset.modelId ?? 'silma')}
+                        {modelLabel(preset.modelId ?? LEGACY_MODEL_ID)}
                       </Badge>
                     </div>
                     <p className="line-clamp-2 text-xs text-muted-foreground">

@@ -6,6 +6,7 @@ import { generateSchema } from '@/lib/validations';
 import { revalidatePath } from 'next/cache';
 import fs from 'fs/promises';
 import path from 'path';
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 /** Whether the chosen model clones from clip + transcription, or audio alone. */
 async function modelRequiresReferenceText(modelId: string): Promise<boolean> {
@@ -42,14 +43,14 @@ export async function createGeneration(input: FormData | CreateGenerationInput) 
       rawData = {
         text: input.get('text') as string,
         voiceProfileId: (input.get('voiceProfileId') as string) || undefined,
-        modelId: (input.get('modelId') as string) || 'silma',
+        modelId: (input.get('modelId') as string) || DEFAULT_MODEL_ID,
         params: input.get('params') ? JSON.parse(input.get('params') as string) : {},
         outputDir: (input.get('outputDir') as string) || undefined,
       };
     } else {
       rawData = {
         ...input,
-        modelId: input.modelId ?? 'silma',
+        modelId: input.modelId ?? DEFAULT_MODEL_ID,
         params: input.params ?? {},
       };
     }

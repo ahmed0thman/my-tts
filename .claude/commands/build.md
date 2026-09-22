@@ -32,5 +32,5 @@ tts-engine/venv/bin/python -c 'from chatterbox.mtl_tts import ChatterboxMultilin
 curl -s localhost:8000/api/models
 ```
 Syntax checks pass happily while a dependency is broken; these do not. The
-`/api/models` call additionally confirms all three models are registered and
+`/api/models` call additionally confirms the registered models (this branch: `voicetut` only) are listed and
 reports which one is currently resident.

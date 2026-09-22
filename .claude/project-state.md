@@ -1,21 +1,31 @@
 # Project State & Technical Inventory
 
-**Last Updated**: 2026-09-04
-**Status**: Working — three models generating and switching; typecheck and Python compile clean.
+**Last Updated**: 2026-09-22
+**Status**: Working on branch `voicetut` — VoiceTut generating and cloning; typecheck, Python compile and `bash -n` clean.
 
 ---
 
 ## 1. Executive Summary
 A local text-to-speech and zero-shot voice-cloning control board for Arabic that
-runs **three switchable models** behind one interface. A Next.js 15 full-stack
-app talks over HTTP to a Python FastAPI inference sidecar that loads exactly one
-model at a time onto Apple Silicon MPS.
+runs switchable models behind one interface. A Next.js 15 full-stack app talks
+over HTTP to a Python FastAPI inference sidecar that loads exactly one model at
+a time onto Apple Silicon MPS.
 
-| id | Repo | Dialect | Runtime | Parameters |
-|---|---|---|---|---|
-| `silma` (default) | `silma-ai/silma-tts` | فصحى / MSA | F5-TTS / DiT, 150M | `speed`, `cfgStrength`, `nfeStep` (+ `seed`) |
-| `namaa-saudi` | `NAMAA-Space/NAMAA-Saudi-TTS` | سعودي / نجدي | Chatterbox Multilingual fine-tune | `exaggeration`, `cfgWeight`, `temperature` |
-| `namaa-egyptian` | `NAMAA-Space/NAMAA-Egyptian-TTS` | مصري | Chatterbox Multilingual fine-tune | `exaggeration`, `cfgWeight`, `temperature` |
+**This branch registers one model.** Five adapters exist; `MODEL_IDS` lists only
+`voicetut`, because it is the only one that reproduces a speaker's voice
+reliably and it is also the cheapest to run.
+
+| id | Repo | Dialect | Runtime | Parameters | registered |
+|---|---|---|---|---|---|
+| `voicetut` (default) | `mohammedaly22/VoiceTut-TTS` | مصري + AR/EN | OmniVoice — Qwen3-0.6B + Higgs codec | `guidanceScale`, `speed`, `numStep` | **yes** |
+| `silma` | `silma-ai/silma-tts` | فصحى / MSA | F5-TTS / DiT, 150M | `speed`, `cfgStrength`, `nfeStep` (+ `seed`) | no |
+| `namaa-saudi` | `NAMAA-Space/NAMAA-Saudi-TTS` | سعودي / نجدي | Chatterbox fine-tune | `exaggeration`, `cfgWeight`, `temperature` | no |
+| `namaa-egyptian` | `NAMAA-Space/NAMAA-Egyptian-TTS` | مصري | Chatterbox fine-tune | same three | no |
+| `masri-higgs` | `ehabnegm/masri-higgs-v3-egyptian-tts` | مصري | Higgs Audio v3 — Qwen3-4B | `temperature`, `topK` | no |
+
+Measured for `voicetut` on an M1 Pro, fp32 on MPS, 8.94 s reference: warm load
+~4–7 s, RTF 1.76x, peak GPU 3.45 GB (2.34 GB weights + ~1.1 GB activations),
+unload clean at 0 MB. Masri Higgs for comparison: 210 s load, RTF 7.29x, 8.7 GB.
 
 The interface language is Egyptian Arabic throughout, regardless of which
 dialect the selected model speaks.
@@ -31,7 +41,7 @@ dialect the selected model speaks.
 | **Shell Scripts** | `bash -n scripts/setup.sh scripts/dev.sh` | **PASS** |
 | **Prisma Client** | `npx prisma generate` | **PASS** — v6.19.3 |
 | **Engine** | `GET /api/health` | **ok** — `device: mps`, `sample_rate: 24000` |
-| **Registry** | `GET /api/models` | **3 models**, `default: silma` |
+| **Registry** | `GET /api/models` | **1 model**, `default: voicetut` |
 | **Node** | v24.16.0 / npm 11.13.0 | **PASS** |
 
 ### Measured behaviour

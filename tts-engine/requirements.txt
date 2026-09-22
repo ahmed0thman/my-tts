@@ -1,11 +1,12 @@
 # ============================================================
 # TTS engine dependencies — SILMA + Chatterbox (NAMAA dialects)
 #
-# The control board runs three models across two unrelated runtimes:
+# The control board runs five models across three unrelated runtimes:
 #   silma          silma-ai/silma-tts            (F5-TTS, Fusha/MSA)
 #   namaa-saudi    NAMAA-Space/NAMAA-Saudi-TTS   (Chatterbox, Saudi Najdi)
 #   namaa-egyptian NAMAA-Space/NAMAA-Egyptian-TTS(Chatterbox, Egyptian)
 #   masri-higgs    ehabnegm/masri-higgs-v3-...   (Higgs Audio v3, Egyptian)
+#   voicetut       mohammedaly22/VoiceTut-TTS    (OmniVoice, Egyptian, cloning)
 #
 # They coexist in one venv only at torch 2.6.0 / transformers 5.2.0, which is
 # what chatterbox-tts hard-pins. SILMA itself only needs torch>=2.0, and 2.6 is
@@ -27,6 +28,14 @@
 #      ships FFmpeg 9 — pinning avoids that whole coupling.
 #   4. Python 3.11 is required: silma-tts pins numpy<=1.26.4, which has no
 #      cp313 wheels and will not build on 3.13.
+#   5. omnivoice (VoiceTut's backbone) declares transformers>=5.3.0, which we
+#      cannot have — chatterbox pins 5.2.0. The pin exists for exactly one
+#      class, HiggsAudioV2TokenizerModel; 15 of the 16 symbols it imports are
+#      already in 5.2.0. That class is vendored at
+#      engines/vendor/higgs_codec and registered into the transformers
+#      namespace by voicetut_engine._install_codec_shim, so omnivoice and
+#      voicetut-tts install --no-deps. accelerate comes along because VoiceTut
+#      loads with device_map=, which transformers refuses without it.
 # ============================================================
 
 # --- Web layer ---

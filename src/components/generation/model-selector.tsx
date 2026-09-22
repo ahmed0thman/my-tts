@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { FormField, FormItem, FormControl } from '@/components/ui/form';
 import { Cpu, Info, Loader2 } from 'lucide-react';
 import type { TtsModel } from '@/lib/tts-client';
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 const STORAGE_KEY = 'namaa:model-id';
 
@@ -20,7 +21,7 @@ export function ModelSelector({ onModelChange }: ModelSelectorProps) {
   const { control, setValue, watch } = useFormContext();
   const { data, isLoading } = useModels();
 
-  const modelId: string = watch('modelId') || 'silma';
+  const modelId: string = watch('modelId') || DEFAULT_MODEL_ID;
   const models = data?.models ?? [];
   const active = models.find((m) => m.id === modelId);
 
@@ -81,7 +82,7 @@ export function ModelSelector({ onModelChange }: ModelSelectorProps) {
         name="modelId"
         render={({ field }) => (
           <FormItem>
-            <Select onValueChange={handleChange} value={field.value || 'silma'}>
+            <Select onValueChange={handleChange} value={field.value || DEFAULT_MODEL_ID}>
               <FormControl>
                 <SelectTrigger dir="rtl" className="h-12 w-full border-border/80 bg-background/80 shadow-2xs">
                   <SelectValue placeholder="اختر النموذج" />

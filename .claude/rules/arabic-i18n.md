@@ -33,8 +33,11 @@
   - "Temperature": `التنوّع العشوائي`
   - "Save location": `مكان الحفظ`
   - "Record your voice": `سجّل صوتك`
+  - "Guidance scale" (VoiceTut adherence to the reference): `الالتزام بالعينة`
+  - "Diffusion steps" (VoiceTut): `خطوات التوليد`
 
 ## Model & Dialect Labels
 - Dialect names come from the engine (`describe()` / `describe_instance()`), not the frontend, so they stay consistent between the API and the UI: `فصحى / MSA`, `سعودي / نجدي`, `مصري`.
+- `voicetut` is the only model registered on this branch; its dialect reads `مصري` and its notes mention AR/EN code-switching.
 - Capability badges are Arabic, the model repo id stays `dir="ltr" font-mono`: `محتاج نص العينة`, `العينة ≤ 8.05s`.
-- `src/components/history/generation-list.tsx` keeps the short history labels (`MODEL_LABELS`, `PARAM_LABELS`) — add new models and knobs there too, or a badge falls back to the raw English key.
+- `src/components/history/generation-list.tsx` keeps the short history labels (`MODEL_LABELS`, `PARAM_LABELS`) — add new models and knobs there too, or a badge falls back to the raw English key. **Keep entries for unregistered models**: old rows still render through this map, and dropping one would turn existing history into raw ids.

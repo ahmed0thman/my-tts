@@ -33,6 +33,7 @@ import { OutputPathPicker } from './output-path-picker';
 import { formatDuration } from '@/lib/utils';
 import type { TtsModel } from '@/lib/tts-client';
 import { toast } from 'sonner';
+import { DEFAULT_MODEL_ID, LEGACY_MODEL_ID } from '@/lib/models';
 
 export function VoiceControls() {
   const { control, setValue, watch } = useFormContext();
@@ -46,7 +47,7 @@ export function VoiceControls() {
   const [auditioningProfileId, setAuditioningProfileId] = useState<string | null>(null);
   const auditionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const modelId: string = watch('modelId') || 'silma';
+  const modelId: string = watch('modelId') || DEFAULT_MODEL_ID;
   const params: Record<string, number> = watch('params') || {};
   const currentVoiceId = watch('voiceProfileId') || 'default';
 
@@ -57,7 +58,7 @@ export function VoiceControls() {
   // Presets are model-scoped: the parameter names do not transfer between
   // engines, so only show the ones saved for the active model.
   const applicablePresets = (presets ?? []).filter(
-    (p: any) => (p.modelId ?? 'silma') === modelId,
+    (p: any) => (p.modelId ?? LEGACY_MODEL_ID) === modelId,
   );
 
   const handleApplyPreset = (presetId: string) => {

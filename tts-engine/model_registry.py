@@ -6,9 +6,15 @@ parameter schema, and the UI renders controls from that. No frontend change.
 
 from typing import Any, Dict, List
 
-from engines import ChatterboxEngine, HiggsEngine, SilmaEngine
+from engines import ChatterboxEngine, HiggsEngine, SilmaEngine, VoiceTutEngine
 
-DEFAULT_MODEL_ID = "silma"
+# This branch runs VoiceTut only — it is the model that actually clones a
+# user's voice. The other adapters are left on disk and unregistered rather
+# than deleted: they cost nothing while unlisted (ModelManager keeps one model
+# resident), old `Generation` rows still render their labels, and re-listing
+# one is a single edit to MODEL_IDS. Higgs in particular is worth keeping out
+# of reach — one stray click is a 210 s load and 8.7 GB of RAM.
+DEFAULT_MODEL_ID = "voicetut"
 
 
 def _build(engine_id: str, device: str):
@@ -16,6 +22,8 @@ def _build(engine_id: str, device: str):
         return SilmaEngine(device)
     if engine_id == "masri-higgs":
         return HiggsEngine(device)
+    if engine_id == "voicetut":
+        return VoiceTutEngine(device)
 
     variant = _CHATTERBOX_VARIANTS[engine_id]
     return ChatterboxEngine(device, engine_id=engine_id, **variant)
@@ -36,7 +44,7 @@ _CHATTERBOX_VARIANTS: Dict[str, Dict[str, str]] = {
     },
 }
 
-MODEL_IDS: List[str] = ["silma", "namaa-saudi", "namaa-egyptian", "masri-higgs"]
+MODEL_IDS: List[str] = ["voicetut"]
 
 
 def is_valid(engine_id: str) -> bool:
@@ -50,9 +58,21 @@ def create(engine_id: str, device: str):
 
 
 def describe_all(device: str) -> List[Dict[str, Any]]:
-    """Metadata for every registered model, without loading any of them."""
-    out: List[Dict[str, Any]] = [SilmaEngine.describe()]
-    for engine_id, variant in _CHATTERBOX_VARIANTS.items():
-        out.append(ChatterboxEngine(device, engine_id=engine_id, **variant).describe_instance())
-    out.append(HiggsEngine.describe())
+    """Metadata for every *registered* model, without loading any of them.
+
+    Driven by MODEL_IDS, so unlisting a model removes it from the UI in one
+    place instead of here as well.
+    """
+    builders = {
+        "silma": SilmaEngine.describe,
+        "masri-higgs": HiggsEngine.describe,
+        "voicetut": VoiceTutEngine.describe,
+    }
+    out: List[Dict[str, Any]] = []
+    for engine_id in MODEL_IDS:
+        if engine_id in builders:
+            out.append(builders[engine_id]())
+        else:
+            variant = _CHATTERBOX_VARIANTS[engine_id]
+            out.append(ChatterboxEngine(device, engine_id=engine_id, **variant).describe_instance())
     return out

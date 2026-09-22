@@ -139,6 +139,17 @@ uv pip install --python "$PY_BIN" --no-deps \
     nemo_text_processing==1.1.0 \
     silma-tts==1.0.5
 
+echo -e "  Installing VoiceTut and its OmniVoice backbone..."
+# OmniVoice asks for transformers>=5.3.0 for a single class,
+# HiggsAudioV2TokenizerModel, which is vendored at
+# tts-engine/engines/vendor/higgs_codec and shimmed in by the adapter. Every
+# other symbol it imports exists in 5.2.0, so --no-deps keeps our pins.
+# accelerate is required because VoiceTut loads with device_map=.
+uv pip install --python "$PY_BIN" --no-deps \
+    "git+https://github.com/k2-fsa/OmniVoice.git" \
+    voicetut-tts \
+    accelerate
+
 echo -e "  ${GREEN}✓ Python dependencies installed${NC}"
 
 # --- 6e. Verify the import chain ----------------------------

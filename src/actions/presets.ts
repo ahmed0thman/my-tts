@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { presetSchema } from '@/lib/validations';
 import { revalidatePath } from 'next/cache';
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 interface CreatePresetInput {
   name: string;
@@ -19,14 +20,14 @@ export async function createPreset(input: FormData | CreatePresetInput) {
       rawData = {
         name: input.get('name') as string,
         description: (input.get('description') as string) || undefined,
-        modelId: (input.get('modelId') as string) || 'silma',
+        modelId: (input.get('modelId') as string) || DEFAULT_MODEL_ID,
         params: input.get('params') ? JSON.parse(input.get('params') as string) : {},
         voiceProfileId: (input.get('voiceProfileId') as string) || undefined,
       };
     } else {
       rawData = {
         ...input,
-        modelId: input.modelId ?? 'silma',
+        modelId: input.modelId ?? DEFAULT_MODEL_ID,
         params: input.params ?? {},
       };
     }

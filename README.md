@@ -1,35 +1,42 @@
-# 🎙️ Arabic TTS Control Board — three models, one board
+# 🎙️ Arabic TTS Control Board — `voicetut` branch
 
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5-black?style=flat&logo=next.js)](https://nextjs.org/)
 [![React 19](https://img.shields.io/badge/React-19-blue?style=flat&logo=react)](https://react.dev/)
 [![Node.js 24 LTS](https://img.shields.io/badge/Node.js-24%20LTS-green?style=flat&logo=node.js)](https://nodejs.org/)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776ab?style=flat&logo=python)](https://www.python.org/)
-[![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-blue?style=flat&logo=postgresql)](https://www.postgresql.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-file--based-003b57?style=flat&logo=sqlite)](https://www.sqlite.org/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4.3-38bdf8?style=flat&logo=tailwindcss)](https://tailwindcss.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Apple Silicon MPS](https://img.shields.io/badge/Hardware-M1%20Pro%20(MPS)-silver?style=flat&logo=apple)](https://developer.apple.com/metal/)
 
-A local control board for Arabic text-to-speech and zero-shot voice cloning that
-runs **three switchable models** — Fusha, Saudi and Egyptian — on your own
-machine. Record or upload a reference clip, pick a dialect, tune the model's own
-parameters, and generate. Nothing leaves the laptop.
+A local control board for Arabic text-to-speech and zero-shot voice cloning.
+Record a reference clip, paste your script, generate. Nothing leaves the laptop.
+
+**This branch runs one model: VoiceTut.** It is the one that actually reproduces
+a speaker's voice.
 
 | id | Model | Dialect | Runtime | Parameters |
 |---|---|---|---|---|
-| `silma` | [silma-ai/silma-tts](https://huggingface.co/silma-ai/silma-tts) | فصحى / MSA | F5-TTS / DiT, 150M | `speed`, `cfgStrength`, `nfeStep` |
-| `namaa-saudi` | [NAMAA-Space/NAMAA-Saudi-TTS](https://huggingface.co/NAMAA-Space/NAMAA-Saudi-TTS) | سعودي / نجدي | Chatterbox Multilingual fine-tune | `exaggeration`, `cfgWeight`, `temperature` |
-| `namaa-egyptian` | [NAMAA-Space/NAMAA-Egyptian-TTS](https://huggingface.co/NAMAA-Space/NAMAA-Egyptian-TTS) | مصري | Chatterbox Multilingual fine-tune | `exaggeration`, `cfgWeight`, `temperature` |
+| `voicetut` | [mohammedaly22/VoiceTut-TTS](https://huggingface.co/mohammedaly22/VoiceTut-TTS) | مصري + AR/EN code-switch | OmniVoice — Qwen3-0.6B + Higgs codec, 0.6B | `guidanceScale`, `speed`, `numStep` |
+
+Four other adapters — SILMA (Fusha), NAMAA Saudi, NAMAA Egyptian and Masri Higgs
+— are still in `tts-engine/engines/` and still work. They are **unregistered**,
+not deleted: add an id back to `MODEL_IDS` in `tts-engine/model_registry.py` and
+the model reappears in the dropdown with no other change. See
+[Why only VoiceTut?](#-why-only-voicetut) for the reasoning.
 
 ---
 
 ## 📑 Table of Contents
 - [Key Features](#-key-features)
-- [How the three models differ](#-how-the-three-models-differ)
+- [Why only VoiceTut?](#-why-only-voicetut)
+- [What it costs to run](#-what-it-costs-to-run)
+- [Writing a script the model can read](#-writing-a-script-the-model-can-read)
 - [Prerequisites](#-prerequisites)
 - [Quick Start (2 Steps)](#-quick-start-2-steps)
 - [Features & Usage Guide](#-features--usage-guide)
 - [System Architecture](#-system-architecture)
-- [Adding a fourth model](#-adding-a-fourth-model)
+- [Re-enabling another model](#-re-enabling-another-model)
 - [Directory Structure](#-directory-structure)
 - [Available Scripts & Commands](#-available-scripts--commands)
 - [Engine API](#-engine-api)
@@ -39,13 +46,12 @@ parameters, and generate. Nothing leaves the laptop.
 
 ## ✨ Key Features
 
-- 🔀 **Three models, switchable mid-session**: MSA/Fusha via SILMA, plus Saudi Najdi and Egyptian via the NAMAA Chatterbox fine-tunes. One dropdown, no restart.
+- 🎯 **Voice cloning that actually holds**: VoiceTut was trained on ~380 h of Egyptian *podcast* speech across many speakers, and its authors published a speaker-similarity figure (0.83). Give it 3–10 s of you plus that clip's transcript.
 - 🧩 **The UI is built from the engine's schema**: `GET /api/models` publishes each model's capabilities *and its parameter list*, and the control board renders its sliders from that. Registering a model needs no frontend change.
-- 🎤 **Zero-shot voice cloning**: clone from a reference clip — record it in the browser from a built-in teleprompter, or upload a WAV.
-- 🕌 **Correct Arabic pronunciation**: SILMA diacritizes with CATT and normalizes numbers/dates with NeMo before synthesis.
+- 🎤 **Record in the browser**: a built-in teleprompter, or upload a WAV. Raw capture (echo cancellation, noise suppression and AGC all off) because that processing degrades the timbre the cloner depends on.
+- ✍️ **Your punctuation is respected**: a blank line is a hard stop with a real breath, `..` is a rhetorical pause *inside* a sentence, and a trailing `:` gets its beat. See [Writing a script](#-writing-a-script-the-model-can-read).
 - 📁 **Choose where files land**: a save-folder picker backed by the engine's filesystem endpoints; the canonical copy always stays in `storage/audio/` so history and playback keep working.
 - 🔊 **No clipping**: neural vocoders routinely peak above full scale, which `torchaudio.save` would hard-clip into audible crackle. Output is scaled to 0.99 only when it exceeds 1.0, so loudness stays comparable between takes.
-- 🎲 **Reproducible takes**: SILMA echoes its seed back, and it is stored with the generation.
 - ⚡ **Batch mode**: one clip per line.
 - 💾 **Model-scoped presets** and 📜 **full generation history** with inline players, downloads and retries.
 - 🖥️ **RTL Egyptian-Arabic interface**: Shadcn/ui, Tailwind CSS v4, the Cairo typeface, light/dark.
@@ -53,33 +59,99 @@ parameters, and generate. Nothing leaves the laptop.
 
 ---
 
-## 🔍 How the three models differ
+## 🔍 Why only VoiceTut?
 
-They come from two unrelated runtimes and do **not** behave the same way:
+Four Arabic models were built into this board before it. VoiceTut is the only
+one that reproduces *your* voice reliably, and it is also the cheapest to run.
 
-|  | SILMA | NAMAA Saudi / Egyptian |
+|  | VoiceTut | Masri Higgs | SILMA | NAMAA ×2 |
+|---|---|---|---|---|
+| Size | **0.6B** | 4B | 150M | ~1B |
+| Clones from | clip **+ transcript** | clip + transcript | clip + transcript | clip alone |
+| Reference band | **3–10 s** | 6 s cap | 8.05 s cap | none |
+| Speaker similarity | **0.83, published** | never evaluated | — | — |
+| Warm load | **~4–7 s** | ~210 s | ~13 s | ~37 s |
+| RTF | **1.76×** | 7.29× | <1× | ~1× |
+| Peak GPU | **3.5 GB** (fp32) | 8.7 GB | ~0.9 GB | ~0.9 GB |
+| Licence | **Apache-2.0** | creator-only | open | open |
+
+**Masri Higgs is the instructive failure.** It is a 4B model that reads Egyptian
+beautifully — in one voice. Its LoRA was trained on 98 hours of a *single*
+narrator, and speaker identity collapsed onto him; its model card concedes
+speaker similarity was never re-benchmarked after the fine-tune. Its take-to-take
+drift is large enough (±26 Hz median F0 on an **identical** reference) that a
+single A/B sample cannot tell you whether a reference landed at all — a trap
+worth remembering before concluding anything from one pair of clips. The audio
+codec is not at fault: a decode→encode round trip of its own shipped references
+agrees with them 79% on codebook 0, and MPS encoding is bit-identical to CPU.
+
+VoiceTut, by contrast, was trained across many podcast speakers and ships 17
+reference voices. It reuses the *same* Higgs audio codec, so the vendored
+back-port at `tts-engine/engines/vendor/higgs_codec` carries straight over.
+
+---
+
+## 💻 What it costs to run
+
+Measured on an M1 Pro (16 GB unified memory), fp32 on MPS, with an 8.94 s
+reference:
+
+```
+after load       weights 2337 MB   driver 2346 MB
+after generate   weights 2337 MB   driver 3453 MB   ← peak
+after unload     weights    0 MB   driver    3 MB   ← clean, no leak
+```
+
+**~3.5 GB peak at fp32**; weights are constant and generation adds ~1.1 GB of
+activations. In fp16 that is ~2.9 GB, matching the model card's T4 figure.
+
+| VRAM | fp32 | fp16 |
 |---|---|---|
-| Clones from | reference clip **+ its transcription** | reference clip alone |
-| Reference length cap | **8.05 s** | none |
-| Reference text field | required | ignored |
-| Seed returned | yes | no |
-| Cold load | ~13 s | ~37 s (~19 s when switching *between* the two dialects) |
+| 4 GB | tight | comfortable |
+| 6 GB (e.g. RTX 3050) | fits | comfortable |
+| 8 GB+ | fine | fine |
 
-Two consequences worth knowing:
+Two things that change the number:
 
-1. **SILMA silently truncates references over 8.05 s** — and once a clip is cut,
-   it discards the transcription you supplied and re-transcribes with Whisper
-   large-v3-turbo (a 1.6 GB download on first use). The recorder's guidance is
-   currently tuned for the NAMAA models (12–22 s), so clips recorded here work
-   as-is with NAMAA and get truncated by SILMA.
-2. **Parameters do not transfer between models.** Switching resets them to the
-   new model's defaults, and a saved preset only appears when its model is
-   selected.
+1. **Generate without a reference transcript and it loads Whisper
+   large-v3-turbo** (1.6 GB) to transcribe the clip. Always store a
+   `referenceText` and this never happens.
+2. **Longer references cost more**, in both memory and time — RTF went 2.51× →
+   3.88× moving from a 9 s reference to a 23 s one.
 
-Only one model stays resident at a time — on 16 GB of unified memory, SILMA plus
-a Chatterbox checkpoint would crowd out the rest of the stack. Switching unloads
-the previous one; switching between the two NAMAA dialects reuses the loaded base
-and swaps just the fine-tuned weights.
+The adapter hardcodes `dtype="float32"`; fp16 is untested here and is a one-line
+change in `engines/voicetut_engine.py`.
+
+---
+
+## ✍️ Writing a script the model can read
+
+Your punctuation decides where the voice stops. Each chunk is generated
+separately, so this is also what keeps long text from drifting.
+
+| you write | you get |
+|---|---|
+| blank line | hard stop — one chunk per paragraph, 0.38 s of silence |
+| `.` `؟` `!` | sentence end; sentences are **packed** together up to 220 chars |
+| `:` at end of line | a beat before what follows |
+| `..` `...` `…` | rhetorical pause **inside** a sentence — never a break |
+| `،` | short pause, rendered by the model |
+
+```
+السلام عليكم ورحمة الله وبركاته.
+
+بس مبدئيا كده.. خليني أسألك سؤال:
+
+تفتكر إيه الشيء المشترك بين موبايلك.. وشوية الرملة اللي على الشط؟
+```
+
+Three paragraphs, three chunks. `كده..` and `موبايلك..` stay *inside* their
+sentences, so the question keeps one intonation contour instead of being cut in
+half.
+
+**Tashkeel is optional** — VoiceTut's normalizer strips incoming harakat and
+re-adds its own, so diacritics change nothing in the output. Keep them only if
+they help you read.
 
 ---
 
@@ -90,8 +162,8 @@ and swaps just the fine-tuned weights.
 3. **Python 3.11** — provisioned automatically by `uv`. Not 3.12/3.13: `silma-tts` pins `numpy<=1.26.4`, which has no wheels there.
 4. **uv** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 5. **Homebrew** — for `openfst` (pynini compiles against it) and `ffmpeg`.
-6. **Docker** — for PostgreSQL 17 via Docker Compose (or bring your own PostgreSQL and edit `DATABASE_URL`).
-7. **Disk space**: ~10 GB of model weights, plus ~3 GB of Python packages.
+6. **No database server** — the database is a SQLite file at `prisma/namaa.db`. No Docker, no container. (Docker Desktop's VM held ~2 GB that the models are better off with.)
+7. **Disk space**: ~2.3 GB of VoiceTut weights, plus ~3 GB of Python packages.
 
 ---
 
@@ -101,18 +173,19 @@ and swaps just the fine-tuned weights.
 ```bash
 ./scripts/setup.sh
 ```
-Checks prerequisites, creates `.env`, starts PostgreSQL on port 5440, installs
-Node dependencies, applies the Prisma schema, builds the Python 3.11 environment
-(including the three packages that cannot be pip-installed on macOS as
-published), verifies both engine import chains, and pre-downloads ~10 GB of
-weights so your first generation is not a long wait.
+Checks prerequisites, creates `.env`, installs Node dependencies, creates the
+SQLite database, builds the Python 3.11 environment — including the packages
+that cannot be pip-installed on macOS as published, and VoiceTut's OmniVoice
+backbone which installs `--no-deps` (see
+[the transformers pin](#omnivoice-wants-transformers-53-but-we-are-pinned-to-52)) —
+and pre-downloads the weights so your first generation is not a long wait.
 
 ### Step 2: Start Development Servers
 ```bash
 ./scripts/dev.sh
 ```
-Starts PostgreSQL, the FastAPI engine on **:8000**, and Next.js on **:3000**.
-Ctrl+C stops all of them.
+Starts the FastAPI engine on **:8000** and Next.js on **:3000**. Ctrl+C stops
+both. There is no database process to start.
 
 👉 **[http://localhost:3000](http://localhost:3000)**
 *(Swagger docs: [http://localhost:8000/docs](http://localhost:8000/docs))*
@@ -130,21 +203,31 @@ Ctrl+C stops all of them.
    off — that processing degrades the timbre the cloner depends on), then
    decodes to mono 24 kHz, trims edge silence, normalizes, and writes a 16-bit
    PCM WAV entirely client-side.
-3. **Upload tab** — drop a clean WAV (3–30 s, quiet room, no music). You will be
-   asked for its transcription, which SILMA needs and NAMAA ignores.
+3. **Upload tab** — drop a clean WAV from a quiet room, no music. **Aim for
+   8–10 s** and supply the transcript of *exactly* that clip: VoiceTut does not
+   truncate when a transcript is given (deliberately, so audio and text stay
+   aligned), so an over-long clip is used whole and quality degrades silently.
 4. Optionally **تعيين كافتراضي**.
 
-A profile missing its transcription shows a `ناقص نص العينة` badge; you can add
-it any time from the card, and it only blocks generation on SILMA.
+A profile missing its transcription shows a `ناقص نص العينة` badge. Fill it in —
+without it the engine loads Whisper large-v3-turbo (1.6 GB) to transcribe the
+clip on every cold start.
+
+> **The reference is where style comes from.** Timbre transfers from almost any
+> clean clip, but *delivery* — your pacing, your pauses, your emphasis — only
+> transfers if the reference contains it. A flat single sentence gives you your
+> voice reading someone else's rhythm. Record yourself speaking the way you
+> actually present.
 
 ### 2. Generate
 On the studio page (`/`):
-- **نموذج النطق** — pick the model. Badges show its dialect, whether it needs
-  reference text, and its clip cap. Your choice is remembered across sessions.
+- **نموذج النطق** — VoiceTut on this branch. Badges show its dialect, that it
+  needs reference text, and its 10 s clip guidance.
 - **الصوت** — the default sample or one of your profiles.
 - **Parameters** — rendered from the selected model's own schema:
-  - *SILMA*: `سرعة الإلقاء` 0.5–2, `الالتزام بالعينة` 1–4, `خطوات التوليد` 8–32
-  - *NAMAA*: `التعبير العاطفي` 0–1, `سرعة الإيقاع` 0–1, `التنوّع العشوائي` 0.1–1.5
+  - `الالتزام بالعينة` (guidance) 1–5, default 2.0 — how hard to stick to the reference
+  - `سرعة الإلقاء` 0.5–2, default 1.0
+  - `خطوات التوليد` (diffusion steps) 8–64, default 32 — quality vs speed
 - **مكان الحفظ** — an optional folder for an extra copy.
 - **توليد الصوت**, or ⌘/Ctrl + Enter.
 
@@ -160,15 +243,16 @@ model's sliders.
 Both the persona chips in the studio and the suggestions on `/presets` are
 described as a *tone* — pace, expressiveness, fidelity — and resolved against
 whichever model is selected, using that model's own ranges and defaults. So
-«سريع» means `speed 1.6` on SILMA and `cfgWeight 0.2` on a NAMAA model, and a
-suggestion a model cannot express (NAMAA has no fidelity knob) is simply not
-offered. Presets carry their model id, so the studio dropdown only lists the
+«سريع» resolves against whichever model is selected using its own ranges and
+defaults, and a suggestion a model cannot express is simply not offered. Presets carry their model id, so the studio dropdown only lists the
 ones matching the model you have selected.
 
 ### 5. History
 `/history` shows totals, success rate and cumulative duration, filterable by
 voice and status, with inline playback, WAV download, retry (which reuses the
-original model and parameters) and delete.
+original model and parameters) and delete. Rows generated by the now-unregistered
+models keep their own labels — `LEGACY_MODEL_ID` in `src/lib/models.ts` exists
+precisely so unregistering a model never relabels your history.
 
 ---
 
@@ -178,7 +262,7 @@ original model and parameters) and delete.
 [ Browser / RTL UI ]
          │
          ▼
-[ Next.js 15 App ] ◄──────► [ PostgreSQL 17 :5440 ] (Prisma ORM)
+[ Next.js 15 App ] ◄──────► [ SQLite  prisma/namaa.db ] (Prisma ORM)
          │
          │  multipart HTTP — src/lib/tts-client.ts
          ▼
@@ -189,8 +273,11 @@ original model and parameters) and delete.
          ▼
 [ ModelManager ] ── one model resident, asyncio.Lock ── MPS (Metal)
          │
-         ├── engines/silma_engine.py       → silma
-         └── engines/chatterbox_engine.py  → namaa-saudi | namaa-egyptian
+         ├── engines/voicetut_engine.py    → voicetut   ← registered
+         ├── engines/silma_engine.py       → silma       (unregistered)
+         ├── engines/chatterbox_engine.py  → namaa-*     (unregistered)
+         ├── engines/higgs_engine.py       → masri-higgs (unregistered)
+         └── engines/vendor/higgs_codec/   → codec back-ported from transformers 5.17
          │
          ▼
 [ storage/audio · storage/voice-samples ]
@@ -198,19 +285,33 @@ original model and parameters) and delete.
 
 ---
 
-## 🧩 Adding a fourth model
+## 🧩 Re-enabling another model
 
-1. Write an adapter in `tts-engine/engines/` implementing `TTSEngine`:
-   `load()`, `generate()`, `unload()`, and a `describe()` carrying its metadata
-   and parameter list.
-2. Add one entry to `tts-engine/model_registry.py`.
-3. There is no step 3. `GET /api/models` picks it up, the selector lists it, and
-   `ModelParams` renders its sliders.
+The other four adapters are on disk and working. To bring one back:
 
-Two hard requirements: `unload()` must actually release the weights (drop refs,
-`gc.collect()`, `torch.mps.empty_cache()`) or switching will OOM a 16 GB
-machine; and parameter keys must never be added as database columns — they
-belong in the `params` blob.
+```python
+# tts-engine/model_registry.py
+MODEL_IDS: List[str] = ["voicetut", "namaa-egyptian"]
+```
+
+That is the whole change. `GET /api/models` picks it up, the selector lists it,
+and the sliders render from its own schema. `describe_all()` is driven by
+`MODEL_IDS`, so there is no second list to keep in sync.
+
+**Adding a genuinely new model:** write an adapter in `tts-engine/engines/`
+implementing `TTSEngine` — `load()`, `generate()`, `unload()`, and a
+`describe()` carrying its metadata and parameter list — then add its id to
+`MODEL_IDS`. There is no frontend step.
+
+Three hard requirements:
+
+- `unload()` must actually release the weights (drop refs, `gc.collect()`,
+  `torch.mps.empty_cache()`) or switching will OOM a 16 GB machine.
+- Parameter keys must never become database columns — they belong in the
+  `params` blob.
+- **Anything Qwen3-based must force `eager` attention on MPS.** `sdpa` aborts
+  the whole process inside `mps_matmul`; it cannot be caught. Both
+  `higgs_engine` and `voicetut_engine` do this.
 
 ---
 
@@ -229,10 +330,14 @@ my-tts/
 │   ├── model_registry.py           # ← the single place a model is registered
 │   ├── model_manager.py            # one-resident-model manager, MPS detection, locking
 │   ├── audio_utils.py              # validation, peak normalization, folder browsing
+│   ├── progress.py                 # single tracker behind GET /api/progress
 │   ├── engines/
 │   │   ├── base.py                 # the TTSEngine interface
-│   │   ├── silma_engine.py         # SILMA (F5-TTS)
-│   │   └── chatterbox_engine.py    # both NAMAA dialects, incl. adopt()
+│   │   ├── voicetut_engine.py      # ← the registered model
+│   │   ├── silma_engine.py         # SILMA (F5-TTS), unregistered
+│   │   ├── chatterbox_engine.py    # both NAMAA dialects, unregistered
+│   │   ├── higgs_engine.py         # Masri Higgs 4B, unregistered
+│   │   └── vendor/higgs_codec/     # codec back-ported from transformers 5.17
 │   └── requirements.txt            # pins + the macOS staged-install rationale
 ├── src/                            # Next.js 15 application
 │   ├── app/
@@ -245,11 +350,13 @@ my-tts/
 │   │   ├── voices/                 # voice-recorder, upload-dialog, voice-card
 │   │   ├── history/ layout/ studio/ tour/
 │   │   └── ui/                     # 19 Shadcn components
-│   └── lib/                        # prisma, tts-client, validations, audio-encode, reference-script
-├── prisma/schema.prisma            # VoiceProfile, Generation, Preset
+│   └── lib/                        # prisma, tts-client, validations, audio-encode,
+│                                   #   reference-script, tone-axes, models
+├── prisma/
+│   ├── schema.prisma               # VoiceProfile, Generation, Preset
+│   └── namaa.db                    # the database — one file, gitignored
 ├── storage/                        # audio/ and voice-samples/ (gitignored)
-├── scripts/                        # setup.sh, dev.sh
-└── docker-compose.yml              # postgres:17-alpine on host port 5440
+└── scripts/                        # setup.sh, dev.sh
 ```
 
 ---
@@ -258,16 +365,17 @@ my-tts/
 
 | Command | Purpose |
 | :--- | :--- |
-| `./scripts/setup.sh` | Full environment setup, including ~10 GB of model weights |
-| `./scripts/dev.sh` | Launches PostgreSQL, the FastAPI engine and Next.js together |
+| `./scripts/setup.sh` | Full environment setup, including ~2.3 GB of model weights |
+| `./scripts/dev.sh` | Launches the FastAPI engine and Next.js together |
 | `npm run dev` | Next.js dev server only (Turbopack) |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
 | `npx tsc --noEmit` | TypeScript strict check (currently 0 errors) |
 | `npx prisma studio` | Visual database browser |
-| `npx prisma db push` | Push the schema to PostgreSQL |
+| `npx prisma db push` | Create/refresh `prisma/namaa.db` from the schema |
 | `tts-engine/venv/bin/python -m py_compile tts-engine/*.py tts-engine/engines/*.py` | Python syntax check |
 | `curl -s localhost:8000/api/models` | Registry + which model is resident |
+| `curl -s localhost:8000/api/progress` | Live state of the running generation |
 
 ---
 
@@ -282,27 +390,58 @@ my-tts/
 | `GET /api/fs/browse` · `GET /api/fs/validate` | Directory listing for the save-folder picker (directories only — never file contents). |
 | `GET /api/health` | Status, uptime, device, sample rate, `active_model`. |
 | `GET /api/model-info` | Active model plus the full registry. |
+| `GET /api/progress` | Live job state: `loading`/`generating`/`idle`, current chunk, elapsed. Polled once a second by the studio. |
 
 ---
 
 ## ❓ Troubleshooting & FAQ
 
-### Why does the first generation with a model take so long?
-It is being loaded (and on a fresh machine, downloaded). Roughly: SILMA ~13 s,
-a NAMAA model ~37 s cold, ~19 s when switching from the other NAMAA dialect.
-Subsequent generations reuse the resident model.
+### My voice sample sounds like me, but the *style* is wrong
+Style lives in the reference clip, not the model. Timbre transfers from almost
+any clean recording; pacing, pauses and emphasis only transfer if the reference
+actually contains them. A 5 s flat declarative sentence gives you your voice
+reading someone else's rhythm. Re-record 8–10 s of yourself **presenting the way
+you present**, and store the transcript of exactly that clip.
 
-### Why did switching models unload the previous one?
-By design. 16 GB of unified memory does not fit two of these models plus
-PostgreSQL, Next.js and a browser. Resident memory stays around 0.9 GB across a
-full round trip.
+### Why does the first generation take so long?
+The model is being loaded, and on a fresh machine downloaded (2.28 GB). Warm
+load is ~4–7 s; the first one after a download is much slower purely from
+first-touch disk reads.
 
 ### The engine is downloading Whisper — why?
-A reference clip longer than **8.05 s** was used with SILMA. It truncates the
-clip, and a truncated clip makes it discard your transcription and re-transcribe
-with Whisper large-v3-turbo (1.6 GB, cached at
-`~/.cache/huggingface/hub/models--openai--whisper-large-v3-turbo`). Use a shorter
-reference with SILMA, or use a NAMAA model, which has no cap.
+A generation ran with no `referenceText`. VoiceTut then transcribes the
+reference clip itself with Whisper large-v3-turbo (1.6 GB, cached at
+`~/.cache/huggingface/hub/models--openai--whisper-large-v3-turbo`). Fill in the
+profile's reference text and it never loads.
+
+### My long text switches voice partway through
+Each chunk is generated separately, so a script that splits into many chunks
+gives the model many chances to drift. Two things help: **use blank lines** so
+the split happens where you intend, and keep paragraphs substantial — sentences
+are packed together up to 220 characters rather than generated one at a time.
+See [Writing a script](#-writing-a-script-the-model-can-read).
+
+### OmniVoice wants transformers 5.3, but we are pinned to 5.2
+Deliberate, and it works. The `>=5.3.0` pin exists for exactly one class,
+`HiggsAudioV2TokenizerModel`; the other 15 symbols OmniVoice imports all exist
+in 5.2.0. That class is vendored at `tts-engine/engines/vendor/higgs_codec` and
+registered into the `transformers` namespace by
+`voicetut_engine._install_codec_shim()`. So `omnivoice` and `voicetut-tts`
+install `--no-deps`, and the pin that chatterbox needs stays intact.
+
+The shim patches **both** `transformers` and `sys.modules["transformers"]` —
+they are different objects, because transformers replaces itself with a
+`_LazyModule`. Patching only the former leaves `from transformers import ...`
+still raising `ImportError` while `hasattr()` returns `True`.
+
+### `ValueError: Using a device_map ... requires accelerate`
+VoiceTut loads with `device_map=`, which transformers refuses without
+`accelerate`. `setup.sh` installs it `--no-deps`.
+
+### `LLVM ERROR` / `mps_matmul: incompatible dimensions`
+Qwen3 with `sdpa` attention on Metal. It aborts the process, so it cannot be
+caught. `voicetut_engine` forces `eager` on MPS; any other Qwen3-based engine
+must do the same.
 
 ### A HuggingFace download is stuck at 0 bytes.
 That is the xet transfer stalling — observed on NAMAA-Saudi-TTS at 0 bytes for
@@ -319,7 +458,16 @@ ImportError so the class silently becomes `None`. `requirements.txt` pins
 It does — three separate incompatibilities, all handled by `setup.sh` and
 documented at the top of `tts-engine/requirements.txt`: `catt-tashkeel` pins the
 CUDA-only `onnxruntime-gpu`; `nemo_text_processing` pins a pynini with no macOS
-wheels; and Python must be 3.11 for `numpy<=1.26.4`.
+wheels; and Python must be 3.11 for `numpy<=1.26.4`. SILMA is unregistered on
+this branch but still installed, because the venv is shared.
+
+### A generation says "fetch failed" but the WAV was written anyway
+Node's fetch gives up at its 5-minute default while the engine is still
+rendering: the file lands on disk but the app never hears back, so the row is
+marked FAILED with no duration. `generateSpeech()` uses undici's own `fetch`
+with a 1-hour dispatcher. It must be undici's `fetch` and not the global one —
+Node's built-in fetch runs on a *bundled* copy of undici and rejects a
+dispatcher from the npm package with `invalid onRequestStart method`.
 
 ### `ModuleNotFoundError: No module named 'fastapi'` when starting the engine
 A stale `VIRTUAL_ENV` inside `venv/bin/activate` (usually from renaming the venv
@@ -334,10 +482,17 @@ the Python engine can stay up.
 ### How do I confirm MPS acceleration is active?
 `/settings` shows the device badge, or `curl -s localhost:8000/api/health`.
 
-### PostgreSQL container will not start
-```bash
-docker compose up -d postgres
-docker compose ps
-```
-It runs `postgres:17-alpine` on host port 5440. Note that raising the image's
-major version against the existing `namaa_pgdata` volume will fail — dump first.
+### Where is the database?
+`prisma/namaa.db` — one SQLite file, no server and no container. Back it up by
+copying it; `npx prisma db push` recreates it from scratch. It replaced a
+dockerised PostgreSQL 17 because Docker Desktop's VM held ~2 GB the models are
+better off with. SQLite takes a write lock per transaction, which is fine for
+one person generating one clip at a time and is the first thing that would break
+under concurrent writers.
+
+### The progress panel is frozen on a stale snapshot
+It should not be — but if it is reintroduced as a Server Action it will be.
+Next.js runs Server Actions **serially per client**, so a poll written as an
+action queues behind the generation it is reporting on and only resolves once
+that finishes. Progress is a Route Handler (`src/app/api/progress/route.ts`) for
+this reason. Keep it one.

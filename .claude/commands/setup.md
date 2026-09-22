@@ -21,6 +21,7 @@ idempotent — safe to re-run after a failed step.
    - Builds `pynini==2.1.7` against Homebrew's OpenFst (`CPPFLAGS`/`LDFLAGS`, compiles C++, ~2 min).
    - Installs `catt_tashkeel`, `nemo_text_processing` and `silma-tts` with **`--no-deps`** — see the header of `tts-engine/requirements.txt` for why each one cannot be resolved by pip on macOS.
    - Verifies **both** import chains: `silma_tts.api.SilmaTTS` and `chatterbox.mtl_tts.ChatterboxMultilingualTTS`. Either failing aborts setup with the exact command to reproduce it.
+   - Installs `omnivoice` (from git) + `voicetut-tts` + `accelerate` with **`--no-deps`**. OmniVoice declares `transformers>=5.3.0` for a single class, `HiggsAudioV2TokenizerModel`, which is vendored at `tts-engine/engines/vendor/higgs_codec` and shimmed in by `voicetut_engine._install_codec_shim()`; every other symbol it imports exists in our pinned 5.2.0. `accelerate` is needed because VoiceTut loads with `device_map=`.
 6. **Storage Directory Creation**: Prepares `storage/audio/` and `storage/voice-samples/`.
 7. **Model Weight Warm-up** (~10GB, with `HF_HUB_DISABLE_XET=1`):
    - Constructing `SilmaTTS` caches its checkpoint, the vocos vocoder, the CATT tashkeel weights, and builds the NeMo grammars (~2.6GB).

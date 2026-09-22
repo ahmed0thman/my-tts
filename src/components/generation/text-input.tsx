@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { useModels } from "@/hooks/use-models";
 import { GenerationProgress } from "./generation-progress";
 import { paramsForTone, type Tone } from "@/lib/tone-axes";
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 interface PersonaPreset {
   id: string;
@@ -100,7 +101,7 @@ export function TextInput({
 
   // The chip has to know which model is selected to translate its tone into
   // that model's own parameters.
-  const modelId: string = watch("modelId") || "silma";
+  const modelId: string = watch("modelId") || DEFAULT_MODEL_ID;
   const { data: modelsData } = useModels();
   const activeModel = modelsData?.models.find((m) => m.id === modelId);
 

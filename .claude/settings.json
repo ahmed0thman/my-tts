@@ -3,7 +3,7 @@
   "version": "2026-09",
   "project": {
     "name": "namaa-tts-control-board",
-    "description": "Local control board for Arabic TTS and zero-shot voice cloning across three switchable models: SILMA (Fusha/MSA), NAMAA Saudi and NAMAA Egyptian",
+    "description": "Local control board for Arabic TTS and zero-shot voice cloning. Branch `voicetut` registers one model: VoiceTut (Egyptian, OmniVoice/Qwen3-0.6B). Four more adapters (SILMA, NAMAA x2, Masri Higgs) exist but are unregistered.",
     "primaryLanguage": "TypeScript",
     "secondaryLanguage": "Python",
     "defaultEncoding": "utf-8"
