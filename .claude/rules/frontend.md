@@ -55,6 +55,13 @@
 - Used by the studio's persona chips (`text-input.tsx`) and the presets page's suggestions. `modelSupportsTone()` hides a suggestion the active model cannot express, rather than rendering one that would do nothing.
 - Adding a knob to an engine means adding one line to `PARAM_AXES` if it should respond to tones; leaving it out is safe — it just keeps its default.
 
+## Progress & Long Requests
+- `GET /api/progress` (engine) → `src/app/api/progress/route.ts` (proxy) → `useEngineProgress()` → `generation-progress.tsx`, polled once a second while a generation is pending.
+- **The proxy is a Route Handler, not a Server Action, and must stay one.** Next.js runs Server Actions serially per client, so a poll written as an action queues behind the generation it reports on and updates only after it finishes. This was observed: the panel froze at a stale snapshot for the whole run.
+- The studio previously showed four invented "stages" on a 1.2s timer. That is gone — with a model running ~7x slower than realtime, fake progress actively misleads.
+- `percent` is null unless the job has more than one sentence; a single opaque call shows an indeterminate bar rather than sitting at 0%.
+- A failed poll is deliberately quiet (`retry: false`, a small inline note). The generation is unaffected by the poll failing.
+
 ## Component Split
 - `param-sliders.tsx` is presentational: `{ model, values, onChange }`. Both the studio (react-hook-form) and the presets page (local state) render through it.
 - `model-params.tsx` is the thin form-context wrapper around it.

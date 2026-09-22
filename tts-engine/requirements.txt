@@ -5,6 +5,7 @@
 #   silma          silma-ai/silma-tts            (F5-TTS, Fusha/MSA)
 #   namaa-saudi    NAMAA-Space/NAMAA-Saudi-TTS   (Chatterbox, Saudi Najdi)
 #   namaa-egyptian NAMAA-Space/NAMAA-Egyptian-TTS(Chatterbox, Egyptian)
+#   masri-higgs    ehabnegm/masri-higgs-v3-...   (Higgs Audio v3, Egyptian)
 #
 # They coexist in one venv only at torch 2.6.0 / transformers 5.2.0, which is
 # what chatterbox-tts hard-pins. SILMA itself only needs torch>=2.0, and 2.6 is
@@ -60,6 +61,12 @@ torchdiffeq
 tqdm>=4.65.0
 vocos
 x_transformers>=1.31.14
+
+# --- Masri Higgs v3 (Egyptian) ---
+# The model repo ships its own serving module, so nothing to install for the LM.
+# Its acoustic codec lives in transformers >= 5.3, which we cannot install
+# (chatterbox pins 5.2.0), so it is vendored in engines/vendor/higgs_codec.
+num2words
 
 # --- Arabic diacritization (see note 1) ---
 onnxruntime

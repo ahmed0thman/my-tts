@@ -38,7 +38,7 @@ dialect the selected model speaks.
 - Cold load: SILMA ~13 s · NAMAA ~37 s · NAMAA→NAMAA dialect swap ~19 s via `adopt()`.
 - Resident memory holds at ~0.9 GB RSS across a full switch cycle — `unload()` works.
 - Saudi vs Egyptian checkpoints: **291 of 292 tensors differ**; the dialect swap is real.
-- Database currently holds 22 generations, 1 voice profile, and 14 presets (across all three models).
+- Database holds 45 generations, 1 voice profile and 14 presets, all migrated from PostgreSQL into SQLite intact (`Json` and the status enum both round-trip).
 
 ---
 
@@ -48,7 +48,7 @@ dialect the selected model speaks.
 - **Frontend**: Next.js 15.5.25 (App Router) · React 19.2.8 · TypeScript 5.9.3 (strict)
 - **Styling**: Tailwind CSS v4.3.3 (CSS-first config) · Radix/Shadcn (19 UI components) · Hugeicons + Lucide
 - **Data**: TanStack React Query 5.102.8 · React Hook Form 7.87.0 · Zod 3.25.76
-- **Database**: **PostgreSQL 17 Alpine** (Docker, host port 5440) · Prisma 6.19.3
+- **Database**: **SQLite** at `prisma/namaa.db` · Prisma 6.19.3 (no server, no Docker)
 - **ML**: torch **2.6.0** · torchaudio **2.6.0** · transformers **5.2.0** · numpy 1.26.4 · MPS backend
   - These are the versions `chatterbox-tts` hard-pins, and the only set where both runtimes coexist. 2.6 also stays below the torchaudio 2.9 cutover to `torchcodec` (which needs FFmpeg ≤ 7, while Homebrew ships 9).
 - **Audio serving**: Next.js route handler with Range support and stream-cancel handling
@@ -64,17 +64,17 @@ dialect the selected model speaks.
 ### Configuration & Automation
 - `package.json` — Node 24 engine lock; scripts for dev/build/lint and the Prisma helpers.
 - `next.config.ts` — `experimental.serverActions.bodySizeLimit: '12mb'` (reference WAVs travel through a Server Action; the 1 MB default rejects ~20 s of 24 kHz mono).
-- `docker-compose.yml` — `postgres:17-alpine`, host port 5440, volume `namaa_pgdata`, `pg_isready` healthcheck.
+- `docker-compose.yml` — **removed**. The Postgres container was replaced by a SQLite file; Docker Desktop's VM was holding ~2GB the 4B Higgs model needs.
 - `.env` / `.env.example` — `DATABASE_URL`, `TTS_ENGINE_URL`, `NEXT_PUBLIC_TTS_ENGINE_URL`, storage paths.
-- `scripts/setup.sh` — prerequisites (Node 24, uv, Homebrew, Docker), Postgres, npm, Prisma, Python 3.11 venv, the staged macOS install, **both** import verifications, storage dirs, ~10 GB weight warm-up with xet disabled.
-- `scripts/dev.sh` — Postgres, FastAPI (venv binaries by **absolute path**, with a `silma_tts` preflight), Next.js; trap-based cleanup.
+- `scripts/setup.sh` — prerequisites (Node 24, uv, Homebrew), npm, Prisma (creates the SQLite file), Python 3.11 venv, the staged macOS install, **both** import verifications, storage dirs, weight warm-up with xet disabled.
+- `scripts/dev.sh` — FastAPI (venv binaries by **absolute path**, with a `silma_tts` preflight) and Next.js; trap-based cleanup. No database process.
 
 ### Claude Agent Documentation
 - `CLAUDE.md` — root briefing, incl. the multi-model architecture, the cloning contract, the macOS install rationale, and the known stale spots.
 - `.claude/rules/architecture.md` — sidecar pattern, **model registry as the extension point**, route groups, Server Actions, storage isolation.
 - `.claude/rules/frontend.md` — React/Tailwind/Query conventions, **schema-driven model parameters**, save location, voice recording.
 - `.claude/rules/backend-ml.md` — environment pins, multi-model rules, the per-model contract table, MPS, API standards, output handling.
-- `.claude/rules/database.md` — PostgreSQL 17, Prisma singleton, schema conventions incl. the `params` blob rule.
+- `.claude/rules/database.md` — SQLite, Prisma singleton, schema conventions incl. the `params` blob rule.
 - `.claude/rules/arabic-i18n.md` — Cairo, RTL, Egyptian vocabulary, model/dialect labels.
 - `.claude/commands/{setup,dev,build,db}.md` — workflow guides.
 - `.claude/settings.json` — permissions and environment (Node >= 24, Python 3.11, ports 3000/8000/5440).
@@ -136,7 +136,23 @@ dialect the selected model speaks.
 
 ---
 
-## 7. Recently Fixed (2026-09-04)
+## 7. Recently Changed
+
+**2026-09-22 — SQLite replaced PostgreSQL.** The datasource provider is the only
+schema change: Prisma 6.19 supports `enum` and `Json` on SQLite, so `Generation`,
+`Preset` and `VoiceProfile` are unchanged. `docker-compose.yml` is gone, `dev.sh`
+and `setup.sh` no longer touch a database server, and `DATABASE_URL` is
+`file:./namaa.db`. All 60 rows were exported and re-imported with timestamps
+preserved. The motive was memory: Docker Desktop's VM, not Postgres itself.
+
+**2026-09-22 — Fourth model: `masri-higgs` (Egyptian, 4B).** Measured on M1 Pro:
+load 209s, peak RSS 8.74GB, **RTF 7.3x** (27s of compute per 3.7s of audio).
+Two obstacles, both solved: its codec only exists in transformers >= 5.3 (vendored
+into `engines/vendor/higgs_codec`, since chatterbox pins 5.2.0), and its serving
+module hardcodes `sdpa`, which Metal cannot compile for Qwen3's GQA shapes —
+forced to `eager` on MPS. Licence is non-commercial/creator with attribution.
+
+## 8. Recently Fixed (2026-09-04)
 
 - **Persona chips did nothing.** `text-input.tsx` still called `setValue` on the flat `speed`/`cfgStrength`/`nfeStep` fields that left `generateSchema` when parameters became per-model. Chips now carry a tone on shared axes and resolve it against the active model (`src/lib/tone-axes.ts`).
 - **Standalone preset builder saved empty presets.** `presets/page.tsx` rendered SILMA-only sliders and posted flat fields that Zod stripped, producing `params: {}`. It is now model-aware: a model selector, schema-driven sliders via `ParamSliders`, suggestions computed from each model's own ranges, and saved presets rendered with their model badge and correct labels.

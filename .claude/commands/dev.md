@@ -6,15 +6,14 @@
 ```
 
 ## Description
-Starts all necessary development servers concurrently with automated cleanup on exit (Ctrl+C).
+Starts both development servers concurrently with automated cleanup on exit (Ctrl+C). There is no database process — Prisma opens `prisma/namaa.db` directly.
 
 ## Components Started
-1. **PostgreSQL 17**: Ensures the container is active via Docker Compose (host port 5440).
-2. **FastAPI TTS Sidecar**:
+1. **FastAPI TTS Sidecar**:
    - Preflight: checks `venv/bin/uvicorn` is executable and `import silma_tts` succeeds, aborting with a pointer to `setup.sh` if not.
    - Runs `venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000`.
    - Warms the **default model (`silma`)** on startup via a background task; the other two load on first use.
-3. **Next.js 15 Web Application**:
+2. **Next.js 15 Web Application**:
    - Runs `npm run dev` with Turbopack on port 3000.
 
 ## Why absolute venv paths

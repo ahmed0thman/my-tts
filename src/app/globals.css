@@ -4,7 +4,7 @@
 @source "../**/*.{ts,tsx}";
 
 /* ------------------------------------------------------------------ *
- * NAMAA Studio — design tokens
+ * Ahmed TTS — design tokens
  * Warm charcoal "studio rack" base + a single gold accent. Emerald is
  * reserved for live/engine status, red for destructive. No other hues.
  * ------------------------------------------------------------------ */
@@ -254,6 +254,22 @@
 
 .animate-rise {
   animation: namaa-rise 0.4s var(--ease-out-quint) both;
+}
+
+/* Indeterminate bar for the model-loading phase, where there is no fraction to
+   show — the engine cannot report how far through an 8.9GB load it is. RTL
+   safe: it sweeps the track in both directions. */
+@keyframes namaa-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.animate-indeterminate {
+  animation: namaa-indeterminate 1.4s var(--ease-out-quint) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

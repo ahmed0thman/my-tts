@@ -37,28 +37,9 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 # -----------------------------------------------------------
-# 1. Ensure PostgreSQL is Running
+# 1. Start Python TTS Engine
 # -----------------------------------------------------------
-echo -e "${YELLOW}[1/3] Checking PostgreSQL...${NC}"
-
-if command -v docker &> /dev/null; then
-    if docker compose ps 2>/dev/null | grep -q "postgres"; then
-        echo -e "  ${GREEN}✓ PostgreSQL running${NC}"
-    else
-        echo -e "  Starting PostgreSQL..."
-        cd "$PROJECT_DIR"
-        docker compose up -d postgres || docker-compose up -d postgres
-        sleep 2
-        echo -e "  ${GREEN}✓ PostgreSQL started${NC}"
-    fi
-else
-    echo -e "  ${YELLOW}⚠ Docker not found — ensure PostgreSQL is running manually${NC}"
-fi
-
-# -----------------------------------------------------------
-# 2. Start Python TTS Engine
-# -----------------------------------------------------------
-echo -e "\n${YELLOW}[2/3] Starting TTS Engine (FastAPI)...${NC}"
+echo -e "\n${YELLOW}[1/2] Starting TTS Engine (FastAPI)...${NC}"
 
 cd "$PROJECT_DIR/tts-engine"
 
@@ -93,9 +74,9 @@ echo -e "  ${GREEN}✓ TTS Engine starting (PID: $TTS_PID)${NC}"
 sleep 2
 
 # -----------------------------------------------------------
-# 3. Start Next.js Dev Server
+# 2. Start Next.js Dev Server
 # -----------------------------------------------------------
-echo -e "\n${YELLOW}[3/3] Starting Next.js dev server...${NC}"
+echo -e "\n${YELLOW}[2/2] Starting Next.js dev server...${NC}"
 
 cd "$PROJECT_DIR"
 

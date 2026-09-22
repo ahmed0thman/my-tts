@@ -158,7 +158,7 @@ export function VoiceControls() {
                           <HugeiconsIcon icon={AiVoice01Icon} size={18} />
                         </span>
                         <div className="text-right">
-                          <p className="font-bold text-sm">صوت نماء الافتراضي</p>
+                          <p className="font-bold text-sm">الصوت الافتراضي</p>
                           <p className="text-[11px] text-muted-foreground">صوت مصري استوديو متوازن</p>
                         </div>
                       </div>

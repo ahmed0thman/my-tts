@@ -15,7 +15,7 @@
       "npx tsc *",
       "./scripts/*",
       "python3 *",
-      "docker compose *"
+      "sqlite3 *"
     ],
     "denyTerminalCommands": [
       "rm -rf /",
@@ -29,10 +29,10 @@
     "pythonVersion": "3.11",
     "defaultPorts": {
       "web": 3000,
-      "engine": 8000,
-      "database": 5440
+      "engine": 8000
     },
-    "pythonVersionNote": "Exactly 3.11 — silma-tts pins numpy<=1.26.4, which has no wheels for 3.12/3.13. The venv is provisioned with `uv venv --python 3.11`."
+    "pythonVersionNote": "Exactly 3.11 — silma-tts pins numpy<=1.26.4, which has no wheels for 3.12/3.13. The venv is provisioned with `uv venv --python 3.11`.",
+    "database": "SQLite file at prisma/namaa.db (no server)"
   },
   "conventions": {
     "preferTypeScriptStrict": true,

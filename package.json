@@ -1,5 +1,5 @@
 {
-  "name": "namaa-tts-control-board",
+  "name": "ahmed-tts-control-board",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -45,6 +45,7 @@
     "sonner": "^2.0.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0",
+    "undici": "^8.11.0",
     "wavesurfer.js": "^7.12.0",
     "zod": "^3.24.0"
   },

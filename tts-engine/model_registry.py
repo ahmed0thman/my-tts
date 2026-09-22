@@ -6,7 +6,7 @@ parameter schema, and the UI renders controls from that. No frontend change.
 
 from typing import Any, Dict, List
 
-from engines import ChatterboxEngine, SilmaEngine
+from engines import ChatterboxEngine, HiggsEngine, SilmaEngine
 
 DEFAULT_MODEL_ID = "silma"
 
@@ -14,6 +14,8 @@ DEFAULT_MODEL_ID = "silma"
 def _build(engine_id: str, device: str):
     if engine_id == "silma":
         return SilmaEngine(device)
+    if engine_id == "masri-higgs":
+        return HiggsEngine(device)
 
     variant = _CHATTERBOX_VARIANTS[engine_id]
     return ChatterboxEngine(device, engine_id=engine_id, **variant)
@@ -34,7 +36,7 @@ _CHATTERBOX_VARIANTS: Dict[str, Dict[str, str]] = {
     },
 }
 
-MODEL_IDS: List[str] = ["silma", "namaa-saudi", "namaa-egyptian"]
+MODEL_IDS: List[str] = ["silma", "namaa-saudi", "namaa-egyptian", "masri-higgs"]
 
 
 def is_valid(engine_id: str) -> bool:
@@ -52,4 +54,5 @@ def describe_all(device: str) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = [SilmaEngine.describe()]
     for engine_id, variant in _CHATTERBOX_VARIANTS.items():
         out.append(ChatterboxEngine(device, engine_id=engine_id, **variant).describe_instance())
+    out.append(HiggsEngine.describe())
     return out

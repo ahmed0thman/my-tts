@@ -26,19 +26,11 @@ interface GenerationFormProps {
   mode?: 'single' | 'batch';
 }
 
-const NEURAL_STAGES = [
-  'تطبيع وضبط التشكيل المصري للنص...',
-  'استخراج وتوليد البصمة الصوتية عبر MPS...',
-  'توليد الترددات الصوتية بنموذج HiFi-GAN...',
-  'إنهاء ومعالجة ملف WAV النقي...',
-];
-
 export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
   const [isBatchMode, setIsBatchMode] = useState(mode === 'batch');
   const [latestAudioPath, setLatestAudioPath] = useState<string | null>(null);
   const [latestText, setLatestText] = useState<string>('');
   const [latestSavedPath, setLatestSavedPath] = useState<string | null>(null);
-  const [currentStageIndex, setCurrentStageIndex] = useState(0);
 
   useEffect(() => {
     setIsBatchMode(mode === 'batch');
@@ -56,18 +48,6 @@ export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
       outputDir: '',
     },
   });
-
-  // Animate neural pipeline stages during generation
-  useEffect(() => {
-    if (!isPending) {
-      setCurrentStageIndex(0);
-      return;
-    }
-    const interval = setInterval(() => {
-      setCurrentStageIndex((prev) => (prev < NEURAL_STAGES.length - 1 ? prev + 1 : prev));
-    }, 1200);
-    return () => clearInterval(interval);
-  }, [isPending]);
 
   // Keyboard shortcut: Cmd + Enter / Ctrl + Enter
   useEffect(() => {
@@ -139,12 +119,7 @@ export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
           {/* Main Grid: Left Editor (7) + Right Modulation (5) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <div className="lg:col-span-7">
-              <TextInput
-                isPending={isPending}
-                isBatchMode={isBatchMode}
-                currentStageIndex={currentStageIndex}
-                stages={NEURAL_STAGES}
-              />
+              <TextInput isPending={isPending} isBatchMode={isBatchMode} />
             </div>
             <div className="lg:col-span-5">
               <VoiceControls />

@@ -32,7 +32,7 @@ export function Sidebar({ onClose }: SidebarProps) {
             <HugeiconsIcon icon={AiVoice01Icon} size={18} />
           </span>
           <span className="flex min-w-0 flex-col leading-none">
-            <span className="truncate text-sm font-extrabold tracking-tight">NAMAA</span>
+            <span className="truncate text-sm font-extrabold tracking-tight">Ahmed TTS</span>
             <span className="mt-0.5 truncate text-[10px] font-medium text-muted-foreground">
               استوديو الصوت المصري
             </span>

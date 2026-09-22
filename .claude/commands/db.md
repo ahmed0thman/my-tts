@@ -6,7 +6,7 @@
 ```bash
 npx prisma db push
 ```
-Synchronizes changes in `prisma/schema.prisma` directly to the local PostgreSQL database without creating migration history files.
+Synchronizes changes in `prisma/schema.prisma` directly to the local SQLite file without creating migration history files.
 
 ### Schema Migration (Production)
 ```bash
@@ -30,11 +30,10 @@ npx prisma studio
 ```
 Opens Prisma Studio on `http://localhost:5555` to browse and manage table records visually.
 
-### PostgreSQL Container Inspection
+### Inspecting the database file
 ```bash
-docker compose ps
-docker compose logs -f postgres
+sqlite3 prisma/namaa.db ".tables"
+sqlite3 prisma/namaa.db "select modelId, count(*) from Generation group by 1;"
 ```
-Checks container health and views active database transaction logs. The service
-is `postgres:17-alpine`, published on host port **5440** with the named volume
-`namaa_pgdata`.
+The whole database is `prisma/namaa.db`. Copy that file to back it up; delete it
+and `npx prisma db push` to start clean. No server, no container, no port.

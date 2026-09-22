@@ -22,7 +22,7 @@ export default function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <h1 className="text-2xl font-extrabold tracking-tight sm:text-[1.75rem]">
-              استوديو نماء لتوليد الصوت المصري
+              استوديو أحمد لتوليد الصوت العربي
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
               نطق طبيعي بالعامية المصرية بدقة 24kHz، مع تحكم كامل في المشاعر وسرعة الإلقاء.
@@ -63,7 +63,7 @@ export default function DashboardPage() {
                     <p className="line-clamp-2 text-sm leading-relaxed">{gen.text}</p>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant="outline">
-                        {gen.voiceProfile?.name || 'صوت نماء الافتراضي'}
+                        {gen.voiceProfile?.name || 'الصوت الافتراضي'}
                       </Badge>
                       <Badge
                         variant={

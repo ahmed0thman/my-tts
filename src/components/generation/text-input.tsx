@@ -30,6 +30,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { toast } from "sonner";
 import { useModels } from "@/hooks/use-models";
+import { GenerationProgress } from "./generation-progress";
 import { paramsForTone, type Tone } from "@/lib/tone-axes";
 
 interface PersonaPreset {
@@ -87,15 +88,11 @@ interface TextInputProps {
   isPending?: boolean;
   /** Batch mode generates one clip per non-empty line. */
   isBatchMode?: boolean;
-  currentStageIndex?: number;
-  stages?: string[];
 }
 
 export function TextInput({
   isPending = false,
   isBatchMode = false,
-  currentStageIndex = 0,
-  stages,
 }: TextInputProps) {
   const { control, watch, setValue } = useFormContext();
   const text: string = watch("text") || "";
@@ -313,28 +310,9 @@ export function TextInput({
                   </div>
                 </div>
 
-                {/* Neural Progress Pipeline while generating */}
-                {isPending && stages && (
-                  <div className="border-t border-primary/20 bg-muted/60 p-3.5 text-xs">
-                    <div className="flex items-center justify-between mb-2 font-medium">
-                      <span className="flex items-center gap-1.5 text-primary">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span>{stages[currentStageIndex]}</span>
-                      </span>
-                      <span className="numeric text-[11px] text-muted-foreground">
-                        {currentStageIndex + 1}/{stages.length}
-                      </span>
-                    </div>
-                    <div className="h-1 w-full overflow-hidden rounded-full bg-secondary">
-                      <div
-                        className="h-full rounded-full bg-primary transition-[width] duration-500"
-                        style={{
-                          width: `${((currentStageIndex + 1) / stages.length) * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+                {/* Live engine progress, polled from GET /api/progress */}
+                <GenerationProgress isPending={isPending} />
+
               </div>
             </FormControl>
             <FormMessage />

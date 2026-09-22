@@ -6,8 +6,8 @@ import QueryProvider from '@/providers/query-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'NAMAA TTS Control Board',
-  description: 'Control board for NAMAA Egyptian Text-to-Speech Engine',
+  title: 'Ahmed TTS Control Board',
+  description: 'Control board for the Ahmed TTS Arabic Text-to-Speech Engine',
 };
 
 export default function RootLayout({

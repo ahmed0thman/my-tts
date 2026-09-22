@@ -240,7 +240,7 @@ export function OutputPathPicker() {
               dir="ltr"
               value={manualPath}
               onChange={(e) => setManualPath(e.target.value)}
-              placeholder="~/Desktop/namaa-audio"
+              placeholder="~/Desktop/ahmed-tts-audio"
               className="font-mono text-xs"
             />
           </div>

@@ -41,7 +41,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             <span className="sr-only">فتح القائمة</span>
           </Button>
           <h2 className="truncate text-sm font-bold tracking-tight text-muted-foreground">
-            {TITLES[pathname] ?? 'NAMAA TTS'}
+            {TITLES[pathname] ?? 'Ahmed TTS'}
           </h2>
         </div>
 

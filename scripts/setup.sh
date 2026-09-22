@@ -24,7 +24,7 @@ echo -e "${NC}"
 # -----------------------------------------------------------
 # 1. Check Prerequisites
 # -----------------------------------------------------------
-echo -e "${YELLOW}[1/7] Checking prerequisites...${NC}"
+echo -e "${YELLOW}[1/6] Checking prerequisites...${NC}"
 
 # Check Node.js
 if ! command -v node &> /dev/null; then
@@ -55,6 +55,8 @@ if ! command -v uv &> /dev/null; then
 fi
 echo -e "  ${GREEN}✓ uv $(uv --version | awk '{print $2}')${NC}"
 
+# No database server to check: Prisma talks to a local SQLite file.
+
 # Check Homebrew — needed for openfst (pynini builds against it) and ffmpeg
 if ! command -v brew &> /dev/null; then
     echo -e "${RED}❌ Homebrew is not installed. See https://brew.sh${NC}"
@@ -62,19 +64,10 @@ if ! command -v brew &> /dev/null; then
 fi
 echo -e "  ${GREEN}✓ Homebrew found${NC}"
 
-# Check Docker (for PostgreSQL)
-if command -v docker &> /dev/null; then
-    echo -e "  ${GREEN}✓ Docker found${NC}"
-    HAS_DOCKER=true
-else
-    echo -e "  ${YELLOW}⚠ Docker not found. You'll need to set up PostgreSQL manually.${NC}"
-    HAS_DOCKER=false
-fi
-
 # -----------------------------------------------------------
 # 2. Environment File
 # -----------------------------------------------------------
-echo -e "\n${YELLOW}[2/7] Setting up environment...${NC}"
+echo -e "\n${YELLOW}[2/6] Setting up environment...${NC}"
 cd "$PROJECT_DIR"
 
 if [ ! -f .env ]; then
@@ -90,56 +83,28 @@ else
 fi
 
 # -----------------------------------------------------------
-# 3. Start PostgreSQL (Docker)
+# 3. Install Node Dependencies
 # -----------------------------------------------------------
-echo -e "\n${YELLOW}[3/7] Setting up PostgreSQL...${NC}"
-
-if [ "$HAS_DOCKER" = true ]; then
-    echo -e "  Starting PostgreSQL container on port 5440..."
-    docker compose up -d --remove-orphans postgres || docker-compose up -d --remove-orphans postgres
-    echo -e "  Waiting for PostgreSQL to be ready on port 5440..."
-    READY=false
-    for i in {1..30}; do
-        if docker compose exec -T postgres pg_isready -U postgres -d namaa_tts &>/dev/null; then
-            echo -e "  ${GREEN}✓ PostgreSQL is ready on port 5440${NC}"
-            READY=true
-            break
-        fi
-        sleep 1
-    done
-    if [ "$READY" = false ]; then
-        echo -e "  ${RED}❌ PostgreSQL container did not become ready in time.${NC}"
-        echo -e "  ${YELLOW}Check Docker container status with: docker compose logs postgres${NC}"
-        exit 1
-    fi
-else
-    echo -e "  ${YELLOW}⚠ Skipping Docker PostgreSQL. Make sure PostgreSQL is running manually.${NC}"
-    echo -e "  ${YELLOW}  Update DATABASE_URL in .env if needed.${NC}"
-fi
-
-# -----------------------------------------------------------
-# 4. Install Node Dependencies
-# -----------------------------------------------------------
-echo -e "\n${YELLOW}[4/7] Installing Node.js dependencies...${NC}"
+echo -e "\n${YELLOW}[3/6] Installing Node.js dependencies...${NC}"
 cd "$PROJECT_DIR"
 
 npm install
 echo -e "  ${GREEN}✓ Node dependencies installed${NC}"
 
 # -----------------------------------------------------------
-# 5. Setup Prisma
+# 4. Setup Prisma
 # -----------------------------------------------------------
-echo -e "\n${YELLOW}[5/7] Setting up database schema...${NC}"
+echo -e "\n${YELLOW}[4/6] Setting up database schema...${NC}"
 cd "$PROJECT_DIR"
 
 npx prisma generate
 npx prisma db push --accept-data-loss 2>/dev/null || npx prisma db push
-echo -e "  ${GREEN}✓ Database schema applied${NC}"
+echo -e "  ${GREEN}✓ SQLite database ready at prisma/namaa.db${NC}"
 
 # -----------------------------------------------------------
-# 6. Python TTS Engine (SILMA)
+# 5. Python TTS Engine
 # -----------------------------------------------------------
-echo -e "\n${YELLOW}[6/8] Setting up Python TTS engine (SILMA)...${NC}"
+echo -e "\n${YELLOW}[5/7] Setting up Python TTS engine...${NC}"
 
 # --- 6a. Native libraries -----------------------------------
 # openfst: pynini compiles against it. ffmpeg: audio decoding for librosa/pydub.
@@ -195,9 +160,9 @@ else
 fi
 
 # -----------------------------------------------------------
-# 7. Create Storage Directories
+# 6. Create Storage Directories
 # -----------------------------------------------------------
-echo -e "\n${YELLOW}[7/8] Creating storage directories...${NC}"
+echo -e "\n${YELLOW}[6/7] Creating storage directories...${NC}"
 cd "$PROJECT_DIR"
 
 mkdir -p storage/audio
@@ -205,9 +170,9 @@ mkdir -p storage/voice-samples
 echo -e "  ${GREEN}✓ Storage directories ready${NC}"
 
 # -----------------------------------------------------------
-# 8. Pre-download Model Weights
+# 7. Pre-download Model Weights
 # -----------------------------------------------------------
-echo -e "\n${YELLOW}[8/8] Pre-downloading model weights...${NC}"
+echo -e "\n${YELLOW}[7/7] Pre-downloading model weights...${NC}"
 echo -e "  ~10GB total: SILMA (2.6GB) + Chatterbox base (3GB) + two NAMAA"
 echo -e "  dialect checkpoints (2.1GB each). Doing it now means the first"
 echo -e "  generation is not a long wait."

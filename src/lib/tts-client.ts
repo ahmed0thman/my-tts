@@ -1,4 +1,28 @@
+import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from 'undici';
+
 const TTS_ENGINE_URL = process.env.TTS_ENGINE_URL || 'http://localhost:8000';
+
+/**
+ * Generation holds the connection open with no bytes sent until the whole clip
+ * is rendered, and undici gives up after 5 minutes by default — which silently
+ * failed a Masri Higgs run that had already written its WAV to disk (210s to
+ * load the model + 220s to render 30s of audio). Nothing is streamed
+ * incrementally, so there is no keepalive to rely on; the timeouts simply have
+ * to be longer than the slowest model.
+ *
+ * The request goes through undici's own `fetch`, not the global one. Node's
+ * built-in fetch is powered by a *bundled* copy of undici and rejects a
+ * dispatcher built by the npm package with `invalid onRequestStart method` —
+ * the two versions do not share an interface. Importing both from the same
+ * package keeps them consistent.
+ */
+const GENERATE_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
+
+const generateAgent = new Agent({
+  headersTimeout: GENERATE_TIMEOUT_MS,
+  bodyTimeout: GENERATE_TIMEOUT_MS,
+  connectTimeout: 30_000,
+});
 
 export interface VoiceSample {
   filename: string;
@@ -102,7 +126,7 @@ export interface DirectoryValidation {
  * The FastAPI server expects multipart form data.
  */
 export async function generateSpeech(params: GenerateSpeechParams): Promise<GenerateSpeechResult> {
-  const formData = new FormData();
+  const formData = new UndiciFormData();
   formData.append('text', params.text);
   if (params.voiceProfilePath) {
     formData.append('voice_profile_path', params.voiceProfilePath);
@@ -117,9 +141,10 @@ export async function generateSpeech(params: GenerateSpeechParams): Promise<Gene
     formData.append('output_dir', params.outputDir);
   }
 
-  const response = await fetch(`${TTS_ENGINE_URL}/api/generate`, {
+  const response = await undiciFetch(`${TTS_ENGINE_URL}/api/generate`, {
     method: 'POST',
     body: formData,
+    dispatcher: generateAgent,
   });
 
   if (!response.ok) {
@@ -220,6 +245,32 @@ export async function deleteVoice(filename: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`Failed to delete voice: ${response.statusText}`);
   }
+}
+
+export interface EngineProgress {
+  state: 'idle' | 'loading' | 'generating' | 'error';
+  model_id: string | null;
+  detail: string;
+  chunk: number;
+  chunks: number;
+  frames: number;
+  /** Seconds of audio rendered so far in the current chunk. */
+  audio_seconds: number;
+  elapsed: number;
+  /** Chunk-based, and deliberately capped below 100 — the model decides when a sentence ends. */
+  percent: number | null;
+  error: string | null;
+}
+
+/**
+ * What the engine is doing right now. Polled while a generation is pending.
+ */
+export async function getProgress(): Promise<EngineProgress> {
+  const response = await fetch(`${TTS_ENGINE_URL}/api/progress`);
+  if (!response.ok) {
+    throw new Error(`Failed to get progress: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 /**

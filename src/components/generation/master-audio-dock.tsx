@@ -122,7 +122,7 @@ export function MasterAudioDock({ src, text, onClose }: MasterAudioDockProps) {
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `namaa-tts-${Date.now()}.wav`;
+      a.download = `ahmed-tts-${Date.now()}.wav`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

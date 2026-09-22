@@ -3,7 +3,7 @@
 ## Sidecar Pattern
 - The Python FastAPI backend (`tts-engine/`) runs as an independent local microservice on port 8000.
 - Next.js never directly spawns Python child processes during user requests. All interaction occurs via HTTP calls orchestrated by `src/lib/tts-client.ts`.
-- The Next.js frontend runs on port 3000; PostgreSQL on host port 5440.
+- The Next.js frontend runs on port 3000. The database is a local SQLite file (`prisma/namaa.db`) — no server, no container.
 
 ## Model Registry (the extension point)
 - Backends are adapters in `tts-engine/engines/` implementing `TTSEngine`; `tts-engine/model_registry.py` is the **single** place a model is registered.

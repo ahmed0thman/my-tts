@@ -17,6 +17,7 @@ const MODEL_LABELS: Record<string, string> = {
   silma: 'SILMA — فصحى',
   'namaa-saudi': 'NAMAA — سعودي',
   'namaa-egyptian': 'NAMAA — مصري',
+  'masri-higgs': 'Masri Higgs — مصري',
 };
 
 const PARAM_LABELS: Record<string, string> = {
@@ -26,6 +27,7 @@ const PARAM_LABELS: Record<string, string> = {
   exaggeration: 'التعبير',
   cfgWeight: 'الإيقاع',
   temperature: 'التنوّع',
+  topK: 'الاحتمالات',
 };
 
 export function GenerationList() {

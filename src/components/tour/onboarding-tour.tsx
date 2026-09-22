@@ -62,7 +62,7 @@ export function OnboardingTour() {
       targetId: 'tour-voice-select',
       badge: 'الخطوة 3 من 4',
       title: 'اختيار الصوت واستنساخه',
-      description: 'استخدم صوت نماء الافتراضي، أو ارفع عينة من صوتك (5-15 ثانية) من صفحة الأصوات لاستنساخه مجاناً.',
+      description: 'استخدم الصوت الافتراضي، أو ارفع عينة من صوتك (5-15 ثانية) من صفحة الأصوات لاستنساخه مجاناً.',
       actionLabel: 'معاينة الصوت الافتراضي',
       actionHandler: () => {
         const auditionBtn = document.querySelector('[title="استمع لعينة الصوت"]') as HTMLButtonElement | null;

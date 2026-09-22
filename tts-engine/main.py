@@ -19,6 +19,7 @@ import io
 import json
 
 import model_registry
+import progress
 from model_manager import ModelManager
 from audio_utils import (
     generate_unique_filename,
@@ -241,6 +242,16 @@ async def health_check():
         "uptime": time.time() - START_TIME,
         **status
     }
+
+@app.get("/api/progress")
+async def get_progress():
+    """What the engine is doing right now.
+
+    Polled by the studio while a generation is pending — the 4B model runs
+    several times slower than realtime, so a spinner alone cannot distinguish
+    slow from stuck.
+    """
+    return progress.tracker.snapshot()
 
 @app.get("/api/models")
 async def list_models():

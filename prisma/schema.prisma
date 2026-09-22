@@ -3,7 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  // SQLite, not a server: the board is single-user and local, and dropping the
+  // Postgres container frees the Docker Desktop VM (~2GB) for the 4B model.
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 

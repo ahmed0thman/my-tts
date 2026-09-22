@@ -120,7 +120,7 @@ export function AudioPlayer({ src, isLoading, compact = false }: AudioPlayerProp
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `namaa-tts-${Date.now()}.wav`;
+      a.download = `ahmed-tts-${Date.now()}.wav`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -146,7 +146,7 @@ export function AudioPlayer({ src, isLoading, compact = false }: AudioPlayerProp
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="h-1.5 w-1.5 animate-ping rounded-full bg-primary" />
-          <span>جاري معالجة وتوليد الصوت عبر نموذج نماء...</span>
+          <span>جاري معالجة وتوليد الصوت...</span>
         </div>
       </div>
     );

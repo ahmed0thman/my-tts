@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 import torch
 
 import model_registry
+import progress
 from engines import ChatterboxEngine
 
 logger = logging.getLogger(__name__)
@@ -69,12 +70,18 @@ class ModelManager:
                 return engine
 
             logger.info(f"Loading model '{target}' on {self.device}...")
+            progress.tracker.start_loading(target)
             try:
                 self.engine = await loop.run_in_executor(None, _load_sync)
                 self.active_id = target
+                # Loading is a phase of somebody's request, not a job of its
+                # own: clear it so the tracker does not read "loading" forever
+                # once the model is resident.
+                progress.tracker.finish()
                 logger.info(f"Model '{target}' loaded successfully on {self.device}.")
             except Exception as e:
                 logger.error(f"Failed to load model '{target}': {e}")
+                progress.tracker.fail(str(e))
                 self.engine = None
                 self.active_id = None
                 raise
@@ -98,14 +105,18 @@ class ModelManager:
         engine = await self.ensure_loaded(model_id)
 
         async with self.lock:
+            progress.tracker.start_generating(engine.id)
             try:
                 loop = asyncio.get_running_loop()
-                return await loop.run_in_executor(
+                result = await loop.run_in_executor(
                     None,
                     lambda: engine.generate(text, audio_prompt_path, reference_text, params or {}),
                 )
+                progress.tracker.finish()
+                return result
             except Exception as e:
                 logger.error(f"Generation error: {e}")
+                progress.tracker.fail(str(e))
                 raise
 
     # -- introspection ----------------------------------------------------

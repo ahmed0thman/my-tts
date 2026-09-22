@@ -1,9 +1,12 @@
 # Database & Prisma Rules
 
-## PostgreSQL Infrastructure
-- PostgreSQL runs via Docker Compose defined in `docker-compose.yml` (`image: postgres:17-alpine`), published on host port **5440** with a named volume `namaa_pgdata` and a `pg_isready` healthcheck.
-- Connection string is configured via `.env` (`DATABASE_URL="postgresql://postgres:postgres@localhost:5440/namaa_tts"`).
-- Bumping the image major version is not a one-line change: an existing `namaa_pgdata` volume will refuse to start under a newer server. Dump first, or recreate the volume.
+## SQLite (no database server)
+- The board is single-user and local, so the database is a file: `prisma/namaa.db`, configured as `DATABASE_URL="file:./namaa.db"` (resolved relative to `prisma/`).
+- It replaced a dockerised PostgreSQL 17. The point was not SQLite's footprint but Docker Desktop's: its VM held ~2GB that the 4B Higgs model needs. There is now no container, no port 5440, and no `docker-compose.yml`.
+- The file is gitignored (`*.db`), so a clone starts empty and `npx prisma db push` recreates it.
+- Back it up by copying the file; there is nothing else to dump.
+- Prisma 6.19 supports both `enum` and `Json` on SQLite, so the schema needed no restructuring — only the datasource provider changed. `Json` is stored as TEXT and round-trips through the client.
+- Concurrency is the one real limitation: SQLite takes a write lock per transaction. Fine for one person generating one clip at a time; if the board ever grows concurrent writers, that is the thing that breaks first.
 
 ## Prisma ORM
 - Client version: Prisma v6.19+ (`@prisma/client` and `prisma`).
