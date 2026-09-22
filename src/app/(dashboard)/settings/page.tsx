@@ -80,7 +80,7 @@ export default function SettingsPage() {
               اتصال المحرك (TTS Engine)
             </CardTitle>
             <CardDescription>
-              إعدادات الاتصال بالخادم المحلي لتوليد الصوت (Ahmed TTS Engine)
+              إعدادات الاتصال بالخادم المحلي لتوليد الصوت (Sawtak Engine)
             </CardDescription>
           </CardHeader>
 

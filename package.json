@@ -1,5 +1,5 @@
 {
-  "name": "ahmed-tts-control-board",
+  "name": "sawtak",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -13,7 +13,11 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "electron": "node electron/launch.js",
+    "electron:build": "next build && electron-builder --mac --dir",
+    "electron:dist": "next build && electron-builder --mac",
+    "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.0",
@@ -53,9 +57,60 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.3.0",
     "prisma": "^6.0.0",
+    "sharp": "^0.35.4",
     "typescript": "^5.7.0"
-  }
+  },
+  "main": "electron/main.js",
+  "build": {
+    "appId": "com.ahmedhisham.sawtak",
+    "productName": "Sawtak",
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "public/**/*",
+      "build/icon.png",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "prisma",
+        "to": "prisma",
+        "filter": [
+          "schema.prisma"
+        ]
+      },
+      {
+        "from": "tts-engine",
+        "to": "tts-engine",
+        "filter": [
+          "**/*.py",
+          "requirements.txt",
+          "!venv/**"
+        ]
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "icon": "build/icon.png"
+    },
+    "directories": {
+      "output": "dist-electron"
+    }
+  },
+  "description": "صوتك — Egyptian Arabic text-to-speech and voice cloning, running entirely on your own machine."
 }

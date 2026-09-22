@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Sawtak</title>
+  <defs>
+    <linearGradient id="plate" x1="180" y1="120" x2="844" y2="904" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f2c476"/>
+      <stop offset="48%" stop-color="#e5ab48"/>
+      <stop offset="100%" stop-color="#a8741a"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#plate)"/>
+
+  <g transform="translate(16, -20)">
+    <g fill="none" stroke="#1a1206" stroke-linecap="round" stroke-linejoin="round">
+      <path d="
+        M 480 570
+        H 740
+        C 815 570 825 440 755 375
+        C 670 300 540 430 480 570
+      " stroke-width="64"/>
+
+      <path d="
+        M 480 570
+        C 480 735 380 765 310 765
+        C 220 765 175 675 175 515
+      " stroke-width="64"/>
+    </g>
+
+    <g fill="#1a1206">
+      <path d="
+        M 420 405
+        C 420 340 450 326 480 326
+        C 510 326 540 340 540 405
+        V 500
+        C 540 540 520 570 480 570
+        C 440 570 420 540 420 500
+        Z
+      "/>
+
+      <rect x="438" y="376" width="84" height="18" rx="9" fill="#e5ab48"/>
+      <rect x="438" y="408" width="84" height="18" rx="9" fill="#e5ab48"/>
+      <rect x="438" y="440" width="84" height="18" rx="9" fill="#e5ab48"/>
+    </g>
+  </g>
+</svg>

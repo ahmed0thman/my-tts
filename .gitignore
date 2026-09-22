@@ -68,3 +68,17 @@ storage/voice-samples/*
 *.db-journal
 *.db-wal
 *.db-shm
+
+# App icon source and generated assets
+!build/
+build/*
+!build/icon.svg
+!build/icon.icns
+!build/icon.ico
+!build/icon.png
+!build/icons/
+build/icons/*
+!build/icons/*.png
+
+# Electron build output
+dist-electron/

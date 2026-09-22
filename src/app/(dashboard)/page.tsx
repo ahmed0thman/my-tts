@@ -22,10 +22,10 @@ export default function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <h1 className="text-2xl font-extrabold tracking-tight sm:text-[1.75rem]">
-              استوديو أحمد لتوليد الصوت العربي
+              صوتك — استوديو النطق المصري
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              نطق طبيعي بالعامية المصرية بدقة 24kHz، مع تحكم كامل في المشاعر وسرعة الإلقاء.
+              اكتب نصك، واسمعه بصوتك إنت. عامية مصرية بدقة 24kHz، وكله بيشتغل على جهازك.
             </p>
           </div>
           <Badge variant="outline" className="numeric shrink-0">

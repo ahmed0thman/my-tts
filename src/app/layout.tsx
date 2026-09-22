@@ -6,8 +6,8 @@ import QueryProvider from '@/providers/query-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Ahmed TTS Control Board',
-  description: 'Control board for the Ahmed TTS Arabic Text-to-Speech Engine',
+  title: 'صوتك · Sawtak',
+  description: 'نطق عربي بصوتك إنت — تحويل نص لكلام واستنساخ صوت، كله على جهازك.',
 };
 
 export default function RootLayout({

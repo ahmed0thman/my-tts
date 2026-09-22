@@ -47,7 +47,9 @@ MAX_REFERENCE_SECONDS = 10.0
 _ALLOW = ["*.json", "*.jinja", "model.safetensors", "reference_speakers/*"]
 
 #: A blank line is the author saying "stop here" — honoured as a hard break.
-_PARAGRAPH_SPLIT = re.compile(r"\n\s*\n")
+#: The separator is captured, because *how many* blank lines were left says how
+#: long the stop should be: one is a paragraph, two or more is a beat.
+_PARAGRAPH_SPLIT = re.compile(r"((?:[ \t]*\n){2,})")
 #: Sentence end. A colon at end of line counts: "خليني أسألك سؤال:" is a beat.
 _SENTENCE_SPLIT = re.compile(r"(?<=[\.؟\!:])\s+")
 #: `..` / `...` / `…` is a rhetorical pause **inside** a sentence, not the end
@@ -57,9 +59,12 @@ _ELLIPSIS = re.compile(r"\.{2,}|…")
 _ELLIPSIS_MASK = "\u0001"
 
 #: Silence inserted after a chunk. A paragraph break earns a real breath; an
-#: ordinary sentence join just needs to not sound butt-joined.
-GAP_PARAGRAPH = 0.38
+#: ordinary sentence join just needs to not sound butt-joined; and leaving two
+#: or more blank lines buys a deliberate beat — the pause before a punchline or
+#: a rhetorical question, which one paragraph break is too short to carry.
 GAP_SENTENCE = 0.12
+GAP_PARAGRAPH = 0.38
+GAP_BEAT = 0.95
 
 
 def _install_codec_shim() -> None:
@@ -110,10 +115,15 @@ def _pack_sentences(text: str, max_chars: int = 220) -> List[Tuple[str, float]]:
     """
     out: List[Tuple[str, float]] = []
 
-    for paragraph in _PARAGRAPH_SPLIT.split(text):
-        paragraph = paragraph.strip()
+    # re.split with a capturing group interleaves separators, so the gap that
+    # follows each paragraph is known from the text the author actually typed.
+    parts = _PARAGRAPH_SPLIT.split(text)
+    for index in range(0, len(parts), 2):
+        paragraph = parts[index].strip()
         if not paragraph:
             continue
+        separator = parts[index + 1] if index + 1 < len(parts) else ""
+        gap = GAP_BEAT if separator.count("\n") >= 3 else GAP_PARAGRAPH
 
         masked = _ELLIPSIS.sub(lambda m: _ELLIPSIS_MASK * len(m.group()), paragraph)
         buf = ""
@@ -128,7 +138,7 @@ def _pack_sentences(text: str, max_chars: int = 220) -> List[Tuple[str, float]]:
             else:
                 buf = candidate
         if buf:
-            out.append((buf, GAP_PARAGRAPH))
+            out.append((buf, gap))
 
     if not out:
         return [(" ".join(text.split()), 0.0)]
