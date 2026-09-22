@@ -14,19 +14,13 @@ export function useEngineStatus() {
     queryKey: ['engine-status'],
     queryFn: async () => {
       try {
-        const url = `${process.env.NEXT_PUBLIC_TTS_ENGINE_URL || 'http://localhost:8000'}/api/health`;
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          return { isOnline: false };
-        }
-        
-        const data = await response.json();
-        return {
-          isOnline: true,
-          ...data,
-        };
-      } catch (error) {
+        // Proxied through our own origin — see src/app/api/engine-status/route.ts.
+        // Talking to the engine directly from the browser needs its CORS
+        // allowlist to name this exact port, which it does not.
+        const response = await fetch('/api/engine-status');
+        if (!response.ok) return { isOnline: false };
+        return await response.json();
+      } catch {
         return { isOnline: false };
       }
     },
