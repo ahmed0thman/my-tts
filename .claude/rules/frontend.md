@@ -69,6 +69,13 @@
 - `percent` is null unless the job has more than one sentence; a single opaque call shows an indeterminate bar rather than sitting at 0%.
 - A failed poll is deliberately quiet (`retry: false`, a small inline note). The generation is unaffected by the poll failing.
 
+## Projects
+- `/projects` lists projects; `/projects/[id]` lists a project's episodes (cards with a player for merged ones); `/projects/[id]/episodes/[episodeId]` is the workspace. Components live in `src/components/projects/` (`project-dialog`, `episode-dialog`, `script-composer`, `segment-row`, `merge-panel`); data in `src/hooks/use-projects.ts` and `src/hooks/use-episodes.ts`.
+- The episode workspace is one react-hook-form over the render settings (`modelId`, `params`, `voiceProfileId`, `outputDir`) and reuses `VoiceControls` with `showOutputPath={false}` — the folder picker lives in the merge panel, because in a project it receives the episode, not each clip.
+- `restoreSaved` on `VoiceControls` / `ModelSelector` / `OutputPathPicker` is off for an episode that has a voice of its own: its saved voice must win over the studio's last-used model in localStorage, and changing it must not move the studio's.
+- `useRenderQueue` renders sequentially and stops *between* segments; leaving the page stops it the same way. A row still PROCESSING that this page is not rendering is a leftover from a quit app and is shown as pending.
+- Studio batch mode stays, and points long pieces at Projects.
+
 ## Component Split
 - `param-sliders.tsx` is presentational: `{ model, values, onChange }`. Both the studio (react-hook-form) and the presets page (local state) render through it.
 - `model-params.tsx` is the thin form-context wrapper around it.

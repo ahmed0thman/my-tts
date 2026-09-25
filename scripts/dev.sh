@@ -65,13 +65,38 @@ if ! "$VENV_PY" -c "import silma_tts" 2>/dev/null; then
 fi
 echo -e "  ${GREEN}✓ Engine venv OK ($("$VENV_PY" --version))${NC}"
 
-echo -e "  Starting FastAPI on port 8000..."
-"$VENV_UVICORN" main:app --reload --host 0.0.0.0 --port 8000 &
-TTS_PID=$!
-echo -e "  ${GREEN}✓ TTS Engine starting (PID: $TTS_PID)${NC}"
+# The engine listens on a Unix domain socket, not a TCP port — 8000 collided
+# with other projects, and a socket file cannot. Same default as
+# tts-engine/main.py, electron/processes.js and src/lib/tts-client.ts.
+export SAWTAK_ENGINE_SOCKET="${SAWTAK_ENGINE_SOCKET:-$PROJECT_DIR/storage/run/engine.sock}"
+if [ "${#SAWTAK_ENGINE_SOCKET}" -gt 103 ]; then
+    echo -e "  ${RED}❌ Socket path is longer than macOS allows (103 bytes):${NC}"
+    echo -e "     $SAWTAK_ENGINE_SOCKET"
+    echo -e "     Set SAWTAK_ENGINE_SOCKET to something shorter, e.g. /tmp/sawtak-engine.sock"
+    exit 1
+fi
+# uvicorn chmods the socket 0666; the 0700 directory is what keeps other users out.
+mkdir -p "$(dirname "$SAWTAK_ENGINE_SOCKET")"
+# An override into a shared directory (/tmp) is not ours to lock down.
+chmod 700 "$(dirname "$SAWTAK_ENGINE_SOCKET")" 2>/dev/null || true
 
-# Wait a moment for the server to initialize
-sleep 2
+if curl -sf --unix-socket "$SAWTAK_ENGINE_SOCKET" http://engine/api/health >/dev/null 2>&1; then
+    # The desktop app, or another dev.sh. Starting a second engine would
+    # replace its socket out from under it.
+    echo -e "  ${GREEN}✓ An engine is already answering on the socket — reusing it${NC}"
+else
+    # Nothing answered, so any file there is a stale socket from a run that
+    # died. `--reload` binds it itself and fails with EADDRINUSE rather than
+    # replacing it.
+    rm -f "$SAWTAK_ENGINE_SOCKET"
+    echo -e "  Starting FastAPI on unix:$SAWTAK_ENGINE_SOCKET..."
+    "$VENV_UVICORN" main:app --reload --uds "$SAWTAK_ENGINE_SOCKET" &
+    TTS_PID=$!
+    echo -e "  ${GREEN}✓ TTS Engine starting (PID: $TTS_PID)${NC}"
+
+    # Wait a moment for the server to initialize
+    sleep 2
+fi
 
 # -----------------------------------------------------------
 # 2. Start Next.js Dev Server
@@ -80,9 +105,17 @@ echo -e "\n${YELLOW}[2/2] Starting Next.js dev server...${NC}"
 
 cd "$PROJECT_DIR"
 
-npm run dev &
+# A browser needs a TCP port, but not a famous one. Start from an uncommon
+# number and walk up past anything already listening, rather than taking 3000
+# from whichever other project wanted it.
+WEB_PORT="${SAWTAK_WEB_PORT:-43117}"
+while lsof -nP -iTCP:"$WEB_PORT" -sTCP:LISTEN >/dev/null 2>&1; do
+    WEB_PORT=$((WEB_PORT + 1))
+done
+
+npm run dev -- --hostname 127.0.0.1 --port "$WEB_PORT" &
 NEXT_PID=$!
-echo -e "  ${GREEN}✓ Next.js starting (PID: $NEXT_PID)${NC}"
+echo -e "  ${GREEN}✓ Next.js starting on port $WEB_PORT (PID: $NEXT_PID)${NC}"
 
 # -----------------------------------------------------------
 # Ready!
@@ -92,9 +125,9 @@ echo "╔═══════════════════════�
 echo "║   🚀 All services running!                      ║"
 echo "╠══════════════════════════════════════════════════╣"
 echo "║                                                  ║"
-echo "║   Next.js:    http://localhost:3000               ║"
-echo "║   TTS Engine: http://localhost:8000               ║"
-echo "║   API Docs:   http://localhost:8000/docs          ║"
+echo "║   Next.js:    http://127.0.0.1:$WEB_PORT"
+echo "║   TTS Engine: unix:$SAWTAK_ENGINE_SOCKET"
+echo "║   Probe it:   curl --unix-socket <socket> http://e/api/health"
 echo "║                                                  ║"
 echo "║   Press Ctrl+C to stop all services              ║"
 echo "╚══════════════════════════════════════════════════╝"

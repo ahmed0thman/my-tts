@@ -29,7 +29,18 @@ import { toast } from 'sonner';
 
 const STORAGE_KEY = 'namaa:output-dir';
 
-export function OutputPathPicker() {
+interface OutputPathPickerProps {
+  /**
+   * Restore the last-used folder from localStorage, and remember new choices
+   * there. Off when the form was seeded from a project, which keeps its own
+   * folder and must not move the studio's.
+   */
+  restoreSaved?: boolean;
+  /** Overrides the heading, where the folder receives something other than each clip. */
+  label?: string;
+}
+
+export function OutputPathPicker({ restoreSaved = true, label }: OutputPathPickerProps = {}) {
   const { setValue, watch } = useFormContext();
   const outputDir: string = watch('outputDir') || '';
 
@@ -41,13 +52,14 @@ export function OutputPathPicker() {
 
   // Restore the last chosen folder across sessions
   useEffect(() => {
+    if (!restoreSaved) return;
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) setValue('outputDir', saved, { shouldDirty: false });
     } catch {
       // localStorage can be unavailable (private mode); the default folder still works
     }
-  }, [setValue]);
+  }, [setValue, restoreSaved]);
 
   // Keep the manual field in step with wherever the user has browsed to,
   // so the confirm button always commits the folder they are looking at.
@@ -57,6 +69,7 @@ export function OutputPathPicker() {
 
   const persist = (path: string) => {
     setValue('outputDir', path, { shouldDirty: true });
+    if (!restoreSaved) return;
     try {
       if (path) {
         window.localStorage.setItem(STORAGE_KEY, path);
@@ -92,7 +105,7 @@ export function OutputPathPicker() {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-bold">مجلد حفظ الملفات</span>
+          <span className="text-xs font-bold">{label ?? 'مجلد حفظ الملفات'}</span>
           <Tooltip>
             <TooltipTrigger asChild>
               <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-help" />

@@ -18,6 +18,12 @@
 - Chatterbox's `T3` builds `patched_model` lazily on first inference and registers it as a submodule. Swapping `t3` weights afterwards must clear it first (`del t3.patched_model; t3.compiled = False`) or the strict `load_state_dict` fails with missing `patched_model.*` keys. Keep the load **strict** so a genuinely wrong checkpoint still fails loudly.
 - `HF_HUB_DISABLE_XET=1` is set at the very top of `main.py`, before any `huggingface_hub` import. HuggingFace's xet transfer stalls indefinitely on some repos (NAMAA-Saudi-TTS: 0 bytes in 10 minutes, then 2.1GB in 175s with it off).
 
+## Desktop Bundle
+- The packaged app ships its own CPython (uv's relocatable python-build-standalone, copied by `scripts/build-python-runtime.sh`) with **only** `tts-engine/requirements-desktop.txt` plus the same `--no-deps` trio as `setup.sh` (OmniVoice, voicetut-tts, accelerate). ~550 MB, against the dev venv's 1.4 GB. `pydub` and `tqdm` are there because VoiceTut's inference path imports them; they were found by running a generation from the bare runtime, not from its metadata (which lists the training stack).
+- Adapters are imported lazily (`engines/__init__.py` `__getattr__`, `model_registry._ENGINE_CLASS`, duck-typed `adopt`). Importing all four at startup made the bundled engine die on `silma_tts`, which it does not carry. Keep new adapters lazy.
+- The engine reads its data folder from `SAWTAK_DATA_ROOT` (storage/ lives under it); unset, it is the checkout.
+- **Nothing may write inside the bundle.** Python's `__pycache__` did (2,600+ files on first run), which broke the ad-hoc signature — a downloaded copy then reads as "damaged", with no "Open Anyway". Every packaged Python process gets `PYTHONPYCACHEPREFIX=<data>/cache/pycache` (`pythonEnv()` in `electron/processes.js`). Verified: after a full run, `codesign --verify --deep --strict` still passes.
+
 ## Model Contract
 | id | repo | dialect | ref text | ref cap | params |
 |---|---|---|---|---|---|
@@ -61,6 +67,8 @@
   - `X-Peak` / `X-Peak-Normalized`: Original waveform peak, and whether it was scaled down before writing
   - `X-Seed`: Seed used, when the model exposes one
   - `X-Model-Id`: Which engine rendered it
+- `POST /api/merge` takes `paths` (JSON array of stored `audioPath`s — only the basename is honoured, resolved inside storage/audio), `gap_ms` (clamped 0–5000), optional `output_dir` and `filename_hint`. Returns JSON `{ audio_path, saved_path, duration, sample_rate, file_size, clips }`. Runs in the executor without the model lock; writes 16-bit PCM.
+- The engine serves over a Unix socket (`ENGINE_SOCKET` in `main.py`), so there is no CORS middleware — no browser can reach it.
 - `GET /api/health` reports `model_loaded`, `device`, `sample_rate` and `active_model`. `GET /api/model-info` adds the full registry.
 - Reference audio files must be clean WAV files at least 3 seconds long and no longer than the **registered models' shortest `maxReferenceSeconds`**. `validate_audio_file(path, max_seconds=...)` takes the cap as a parameter — `DEFAULT_MAX_REFERENCE_SECONDS = 30.0` is only the fallback for callers that do not know the model. `/api/upload-reference` passes `_reference_cap()`, the minimum over the registry, because a reference is stored once and used by whichever model is selected later.
 - `voicetut_engine._check_reference_length()` re-checks at generation time and raises `ValueError` above the cap; `/api/generate` maps `ValueError` to **400**, not 500, since the message is written for the user in Arabic and travels to the toast via `detail`. This is deliberate rather than a silent truncation: the library does not truncate when `ref_text` is supplied, and cutting the audio without cutting the transcript to match is itself the cause of the drift.

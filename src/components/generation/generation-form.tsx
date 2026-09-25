@@ -19,6 +19,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { VolumeHighIcon, FlashIcon } from '@hugeicons/core-free-icons';
 import { useCreateGeneration } from '@/hooks/use-generations';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 type GenerateFormValues = z.infer<typeof generateSchema>;
@@ -115,6 +116,19 @@ export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
 
   return (
     <div className="space-y-8 w-full max-w-5xl mx-auto">
+      {/* Batch mode here is fire-and-forget: the clips land in the history,
+          unordered and unmerged. A long piece belongs in a project. */}
+      {isBatchMode && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm">
+          <span>
+            بتعمل حلقة أو فيديو طويل؟ المشاريع بتحفظ ترتيب المقاطع، وتخليك تراجع وتعيد كل مقطع لوحده، وبتدمجهم في ملف واحد.
+          </span>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/projects">افتح المشاريع</Link>
+          </Button>
+        </div>
+      )}
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Main Grid: Left Editor (7) + Right Modulation (5) */}

@@ -3,13 +3,10 @@
 import { useEngineStatus } from '@/hooks/use-engine-status';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useTheme } from 'next-themes';
 import { Server, Settings2, HardDrive, Cpu, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const THEME_OPTIONS = [
@@ -34,31 +31,10 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { data: engineData, isLoading, refetch } = useEngineStatus();
 
-  const [engineUrl, setEngineUrl] = useState('http://localhost:8000');
-
   // `theme` is undefined during SSR, so rendering the selected state before
   // mount produced a hydration mismatch on these buttons.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-
-  useEffect(() => {
-    try {
-      const savedUrl = localStorage.getItem('engine_url');
-      if (savedUrl) setEngineUrl(savedUrl);
-    } catch {
-      /* storage can be unavailable — fall back to the default URL */
-    }
-  }, []);
-
-  const handleSaveUrl = () => {
-    try {
-      localStorage.setItem('engine_url', engineUrl);
-      toast.success('تم حفظ رابط النموذج بنجاح');
-      refetch();
-    } catch {
-      toast.error('تعذّر حفظ الرابط في هذا المتصفح');
-    }
-  };
 
   const isOnline = engineData?.isOnline ?? false;
   const sampleRate = (engineData as any)?.sample_rate;
@@ -85,22 +61,22 @@ export default function SettingsPage() {
           </CardHeader>
 
           <CardContent className="space-y-5">
+            {/* Read-only: the address is decided by whoever launched the
+                engine (the desktop app or scripts/dev.sh), not by this page.
+                The editable URL field that used to be here was saved to
+                localStorage and read by nothing. */}
             <div className="space-y-2">
-              <Label htmlFor="engine-url">رابط الخادم (URL)</Label>
-              {/* Input and its action live on one row — the button used to
-                  float unattached at the far edge of the card. */}
-              <div className="flex gap-2">
-                <Input
-                  id="engine-url"
-                  value={engineUrl}
-                  onChange={(e) => setEngineUrl(e.target.value)}
-                  dir="ltr"
-                  className="font-mono text-sm"
-                />
-                <Button onClick={handleSaveUrl} className="shrink-0">
-                  حفظ
-                </Button>
-              </div>
+              <p className="text-sm font-semibold">عنوان الاتصال</p>
+              <p
+                dir="ltr"
+                className="truncate rounded-lg border border-border bg-muted px-3 py-2 text-left font-mono text-xs text-muted-foreground"
+                title={engineData?.address}
+              >
+                {engineData?.address ?? '…'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                النموذج بيشتغل على ملف socket جوه المشروع مش على بورت، فمستحيل يتعارض مع أي برنامج تاني على الجهاز.
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/50 p-4">

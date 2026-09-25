@@ -29,11 +29,17 @@ import warnings
 warnings.filterwarnings("ignore")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "tts-engine"))
-sys.path.insert(0, os.path.join(ROOT, "tts-engine", "engines", "vendor"))
 
-DB = os.path.join(ROOT, "prisma", "namaa.db")
-SAMPLES = os.path.join(ROOT, "storage", "voice-samples")
+# The desktop app runs this from inside Sawtak.app on first launch, where the
+# engine code, the database and storage/ are three unrelated folders. Each can
+# be pointed at explicitly; unset, they resolve inside a checkout.
+ENGINE_DIR = os.environ.get("SAWTAK_ENGINE_DIR") or os.path.join(ROOT, "tts-engine")
+DATA_ROOT = os.environ.get("SAWTAK_DATA_ROOT") or ROOT
+sys.path.insert(0, ENGINE_DIR)
+sys.path.insert(0, os.path.join(ENGINE_DIR, "engines", "vendor"))
+
+DB = os.environ.get("SAWTAK_DB_PATH") or os.path.join(ROOT, "prisma", "namaa.db")
+SAMPLES = os.path.join(DATA_ROOT, "storage", "voice-samples")
 SAMPLE_RATE = 24000
 
 #: Marks an imported profile so it is recognisable in the list and so re-runs

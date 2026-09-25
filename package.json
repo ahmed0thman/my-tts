@@ -1,5 +1,6 @@
 {
   "name": "sawtak",
+  "productName": "Sawtak",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -11,12 +12,12 @@
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "db:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "electron": "node electron/launch.js",
-    "electron:build": "npm run icons && node scripts/prepare-desktop-build.mjs && next build && electron-builder --mac --dir",
-    "electron:dist": "npm run icons && node scripts/prepare-desktop-build.mjs && next build && electron-builder --mac",
+    "electron:build": "npm run icons && ./scripts/build-python-runtime.sh && prisma generate && next build && electron-builder --mac --dir",
+    "electron:dist": "npm run icons && ./scripts/build-python-runtime.sh && prisma generate && next build && electron-builder --mac",
     "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "lucide-react": "^1.40.0",
     "next": "^15.3.0",
     "next-themes": "^0.4.6",
+    "prisma": "^6.19.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.87.0",
@@ -61,7 +63,6 @@
     "electron-builder": "^26.15.3",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.3.0",
-    "prisma": "^6.0.0",
     "sharp": "^0.35.4",
     "typescript": "^5.7.0"
   },
@@ -73,10 +74,13 @@
     "files": [
       "electron/**/*",
       ".next/**/*",
+      "!.next/cache/**/*",
       "public/**/*",
       "build/icon.png",
       "next.config.mjs",
-      "package.json"
+      "package.json",
+      "prisma/schema.prisma",
+      "prisma/migrations/**/*"
     ],
     "mac": {
       "icon": "build/icon.icns",
@@ -100,6 +104,23 @@
       {
         "from": "node_modules/.prisma",
         "to": "app/node_modules/.prisma"
+      },
+      {
+        "from": "build/python-runtime",
+        "to": "python"
+      },
+      {
+        "from": "tts-engine",
+        "to": "engine",
+        "filter": [
+          "**/*.py",
+          "!venv*/**",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "scripts/import_builtin_voices.py",
+        "to": "engine/import_builtin_voices.py"
       }
     ]
   },

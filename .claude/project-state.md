@@ -87,7 +87,7 @@ dialect the selected model speaks.
 - `.claude/rules/database.md` — SQLite, Prisma singleton, schema conventions incl. the `params` blob rule.
 - `.claude/rules/arabic-i18n.md` — Cairo, RTL, Egyptian vocabulary, model/dialect labels.
 - `.claude/commands/{setup,dev,build,db}.md` — workflow guides.
-- `.claude/settings.json` — permissions and environment (Node >= 24, Python 3.11, ports 3000/8000/5440).
+- `.claude/settings.json` — permissions and environment (Node >= 24, Python 3.11, engine on a Unix socket, web on a free loopback port).
 
 ### Python TTS Sidecar (`tts-engine/`)
 - `requirements.txt` — pins plus the full rationale for the three `--no-deps` installs and the `setuptools<81` pin.

@@ -35,7 +35,18 @@ import type { TtsModel } from '@/lib/tts-client';
 import { toast } from 'sonner';
 import { DEFAULT_MODEL_ID, LEGACY_MODEL_ID } from '@/lib/models';
 
-export function VoiceControls() {
+interface VoiceControlsProps {
+  /** Restore/remember the model and folder in localStorage — see ModelSelector. */
+  restoreSaved?: boolean;
+  /**
+   * Render the save-folder picker. A project hides it here and shows it next
+   * to the merge instead, since there the folder receives the episode rather
+   * than each clip.
+   */
+  showOutputPath?: boolean;
+}
+
+export function VoiceControls({ restoreSaved = true, showOutputPath = true }: VoiceControlsProps = {}) {
   const { control, setValue, watch } = useFormContext();
   const [activeModel, setActiveModel] = useState<TtsModel | undefined>(undefined);
   const { data: profiles } = useVoiceProfiles();
@@ -113,7 +124,7 @@ export function VoiceControls() {
       <div className="space-y-5 rounded-2xl border border-border bg-card p-4 shadow-plate md:p-5">
         {/* Model Selector */}
         <div id="tour-model-select">
-          <ModelSelector onModelChange={setActiveModel} />
+          <ModelSelector onModelChange={setActiveModel} restoreSaved={restoreSaved} />
         </div>
 
         {/* Header & Voice Profile Selector */}
@@ -217,9 +228,11 @@ export function VoiceControls() {
         </div>
 
         {/* Save Location */}
-        <div id="tour-output-path" className="border-t border-border pt-4">
-          <OutputPathPicker />
-        </div>
+        {showOutputPath && (
+          <div id="tour-output-path" className="border-t border-border pt-4">
+            <OutputPathPicker restoreSaved={restoreSaved} />
+          </div>
+        )}
 
         {/* Preset Save Button */}
         <div className="flex justify-end border-t border-border pt-4">

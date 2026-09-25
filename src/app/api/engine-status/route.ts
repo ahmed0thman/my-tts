@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getHealth } from '@/lib/tts-client';
+import { ENGINE_ADDRESS, getHealth } from '@/lib/tts-client';
 
 /**
  * Engine health, proxied.
  *
  * The sidebar badge used to `fetch('http://localhost:8000/api/health')` from
  * the browser. That put the engine's URL in client code — which the
- * architecture rules forbid — and made the badge depend on the engine's CORS
- * allowlist, which names `http://localhost:3000` and nothing else. Any other
- * port (the desktop app falls back to one when 3000 is taken) showed a healthy
- * engine as offline.
+ * architecture rules forbid — and it can no longer work at all: the engine now
+ * listens on a Unix domain socket, which a browser cannot open.
  *
  * A Route Handler rather than a Server Action, for the same reason the
  * progress poll is one: Next runs Server Actions serially per client, so a
@@ -24,9 +22,10 @@ export async function GET() {
       modelLoaded: health.model_loaded,
       device: health.device,
       uptime: health.uptime,
+      address: ENGINE_ADDRESS,
     });
   } catch {
     // The engine being down is an ordinary state here, not a server error.
-    return NextResponse.json({ isOnline: false });
+    return NextResponse.json({ isOnline: false, address: ENGINE_ADDRESS });
   }
 }

@@ -98,7 +98,10 @@ echo -e "\n${YELLOW}[4/6] Setting up database schema...${NC}"
 cd "$PROJECT_DIR"
 
 npx prisma generate
-npx prisma db push --accept-data-loss 2>/dev/null || npx prisma db push
+# Migrations, not `db push`: the desktop app upgrades its database with the same
+# migration files. A database created by `db push` before migrations existed
+# already has the 0_init schema, so it is marked applied rather than rebuilt.
+npx prisma migrate deploy || { npx prisma migrate resolve --applied 0_init && npx prisma migrate deploy; }
 echo -e "  ${GREEN}✓ SQLite database ready at prisma/namaa.db${NC}"
 
 # -----------------------------------------------------------
@@ -223,11 +226,11 @@ echo "║   Run the development servers:                   ║"
 echo "║   ./scripts/dev.sh                               ║"
 echo "║                                                  ║"
 echo "║   Or manually:                                   ║"
-echo "║   1. cd tts-engine && source venv/bin/activate   ║"
-echo "║      uvicorn main:app --reload --port 8000       ║"
+echo "║   1. cd tts-engine && venv/bin/python main.py    ║"
+echo "║      (listens on storage/run/engine.sock)        ║"
 echo "║   2. npm run dev  (in another terminal)          ║"
 echo "║                                                  ║"
-echo "║   Open: http://localhost:3000                    ║"
+echo "║   dev.sh prints the web URL it picked            ║"
 echo "║                                                  ║"
 echo "║   Model weights are already cached               ║"
 echo "╚══════════════════════════════════════════════════╝"

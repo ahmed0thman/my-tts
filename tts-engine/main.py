@@ -11,7 +11,6 @@ import logging
 from typing import Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 import torchaudio
 import shutil
 import io
@@ -29,6 +28,8 @@ from audio_utils import (
     get_audio_duration,
     normalize_peak,
     resolve_output_dir,
+    merge_clips,
+    safe_export_name,
     list_directories,
     build_shortcuts,
 )
@@ -39,22 +40,33 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="NAMAA Egyptian TTS API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# No CORS middleware: the engine listens on a Unix domain socket (see
+# ENGINE_SOCKET below), which a browser cannot reach at all. Only server-side
+# callers — the Next.js server, the Electron supervisor — ever talk to it.
 
 model_manager = ModelManager()
 
 # Directories
-STORAGE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage"))
+# SAWTAK_DATA_ROOT points at the folder holding storage/ — the desktop app sets
+# it to ~/Library/Application Support/Sawtak, where the engine code (inside the
+# .app) and the data are nowhere near each other. Unset, this is a checkout and
+# storage/ sits next to tts-engine/.
+DATA_ROOT = os.environ.get("SAWTAK_DATA_ROOT") or os.path.join(os.path.dirname(__file__), "..")
+STORAGE_DIR = os.path.abspath(os.path.join(DATA_ROOT, "storage"))
 AUDIO_DIR = os.path.join(STORAGE_DIR, "audio")
 VOICES_DIR = os.path.join(STORAGE_DIR, "voice-samples")
 
 START_TIME = time.time()
+
+# The engine serves HTTP over a Unix domain socket, not a TCP port. Ports 8000
+# and 3000 collided with half the other projects on the machine, and no number
+# is ever guaranteed free; a socket file cannot collide with anything, and it
+# is reachable only by this user (its directory is created 0700 — uvicorn
+# chmods the socket itself to 0666, so the directory is the real guard).
+# Every launcher (scripts/dev.sh, electron/processes.js) and the Next client
+# (src/lib/tts-client.ts) derive the same default; SAWTAK_ENGINE_SOCKET
+# overrides it everywhere.
+ENGINE_SOCKET = os.environ.get("SAWTAK_ENGINE_SOCKET") or os.path.join(STORAGE_DIR, "run", "engine.sock")
 
 @app.on_event("startup")
 async def startup_event():
@@ -164,6 +176,91 @@ async def generate_audio(
     except Exception as e:
         logger.error(f"Error during generation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+#: Longest pause the merge endpoint will insert between two clips.
+MAX_MERGE_GAP_MS = 5000
+
+
+def _resolve_generated_clip(stored: str) -> str:
+    """Maps a clip path as the database stores it onto a file in AUDIO_DIR.
+
+    Rows hold `/storage/audio/gen_x.wav`; only the basename is honoured, so a
+    crafted path can never point the merge at a file outside storage/audio.
+    """
+    name = os.path.basename(stored.strip())
+    if not name.endswith(".wav"):
+        raise ValueError(f"Not a WAV clip: {stored}")
+    path = os.path.join(AUDIO_DIR, name)
+    if not os.path.isfile(path):
+        raise ValueError(f"Clip not found: {name}")
+    return path
+
+
+@app.post("/api/merge")
+async def merge_audio(
+    paths: str = Form(...),
+    gap_ms: int = Form(300),
+    output_dir: Optional[str] = Form(None),
+    filename_hint: Optional[str] = Form(None),
+):
+    """Joins generated clips, in the order given, into one WAV.
+
+    This is how a project's segments become an episode. It never touches the
+    model, so it does not take ModelManager's lock and can run while another
+    generation is in flight. The export is 16-bit PCM rather than the float32
+    the clips are stored as: an episode is meant to leave the app, and every
+    editor and upload form reads 16-bit.
+    """
+    try:
+        stored_paths = json.loads(paths)
+        if not isinstance(stored_paths, list) or not all(isinstance(p, str) for p in stored_paths):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=400, detail="paths must be a JSON array of strings")
+
+    try:
+        clip_paths = [_resolve_generated_clip(p) for p in stored_paths]
+        target_dir = resolve_output_dir(output_dir, AUDIO_DIR)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    gap_seconds = max(0, min(gap_ms, MAX_MERGE_GAP_MS)) / 1000
+
+    def render():
+        wav, rate = merge_clips(clip_paths, gap_seconds)
+        wav, _, _ = normalize_peak(wav)
+        filename = generate_unique_filename("merged", ".wav")
+        filepath = os.path.join(AUDIO_DIR, filename)
+        torchaudio.save(filepath, wav, rate, encoding="PCM_S", bits_per_sample=16)
+
+        # The canonical copy stays in storage/audio for playback; a chosen
+        # folder gets a copy named after the project, never overwriting one
+        # the user already has there.
+        saved_path = filepath
+        if os.path.abspath(target_dir) != os.path.abspath(AUDIO_DIR):
+            stem = safe_export_name(filename_hint)
+            saved_path = os.path.join(target_dir, f"{stem}.wav")
+            suffix = 2
+            while os.path.exists(saved_path):
+                saved_path = os.path.join(target_dir, f"{stem} ({suffix}).wav")
+                suffix += 1
+            shutil.copy2(filepath, saved_path)
+
+        return {
+            "audio_path": f"/storage/audio/{filename}",
+            "saved_path": saved_path,
+            "duration": wav.shape[-1] / rate,
+            "sample_rate": rate,
+            "file_size": os.path.getsize(filepath),
+            "clips": len(clip_paths),
+        }
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, render)
+    except Exception as e:
+        logger.error(f"Error during merge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 def _reference_cap() -> float:
     """The shortest reference window among the registered models.
@@ -299,4 +396,6 @@ async def get_model_info():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    os.makedirs(os.path.dirname(ENGINE_SOCKET), mode=0o700, exist_ok=True)
+    os.chmod(os.path.dirname(ENGINE_SOCKET), 0o700)
+    uvicorn.run(app, uds=ENGINE_SOCKET)

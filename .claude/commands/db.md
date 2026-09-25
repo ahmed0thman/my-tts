@@ -2,17 +2,11 @@
 
 ## Commands
 
-### Schema Synchronization (Development)
+### Schema Changes — always a migration
 ```bash
-npx prisma db push
+npx prisma migrate dev --name <change>
 ```
-Synchronizes changes in `prisma/schema.prisma` directly to the local SQLite file without creating migration history files.
-
-### Schema Migration (Production)
-```bash
-npx prisma migrate dev --name <migration_name>
-```
-Generates and runs SQL migration files in `prisma/migrations/`.
+Writes a migration under `prisma/migrations/`, applies it to `prisma/namaa.db`, regenerates the client. Do **not** use `db push`: the installed desktop app upgrades its own database with `prisma migrate deploy` on launch, and a pushed change has no migration for it to apply.
 
 ### Client Generation
 ```bash
@@ -36,4 +30,4 @@ sqlite3 prisma/namaa.db ".tables"
 sqlite3 prisma/namaa.db "select modelId, count(*) from Generation group by 1;"
 ```
 The whole database is `prisma/namaa.db`. Copy that file to back it up; delete it
-and `npx prisma db push` to start clean. No server, no container, no port.
+and `npx prisma migrate deploy` to start clean. No server, no container, no port.

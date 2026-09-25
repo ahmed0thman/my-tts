@@ -29,7 +29,7 @@ sidecar targets 3.11.
 ```bash
 tts-engine/venv/bin/python -c 'from silma_tts.api import SilmaTTS'
 tts-engine/venv/bin/python -c 'from chatterbox.mtl_tts import ChatterboxMultilingualTTS'
-curl -s localhost:8000/api/models
+curl -s --unix-socket storage/run/engine.sock http://e/api/models
 ```
 Syntax checks pass happily while a dependency is broken; these do not. The
 `/api/models` call additionally confirms the registered models (this branch: `voicetut` only) are listed and

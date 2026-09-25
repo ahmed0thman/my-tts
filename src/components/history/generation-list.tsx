@@ -5,6 +5,7 @@ import { useGenerations, useDeleteGeneration, useRetryGeneration } from '@/hooks
 import { useVoiceProfiles } from '@/hooks/use-voice-profiles';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -187,6 +188,13 @@ export function GenerationList() {
                     <Badge variant="outline">
                       الصوت: {gen.voiceProfile?.name || 'افتراضي'}
                     </Badge>
+                    {gen.episode && (
+                      <Link href={`/projects/${gen.episode.project.id}/episodes/${gen.episode.id}`}>
+                        <Badge variant="accent" className="hover:bg-primary/20">
+                          {gen.episode.project.title} ← {gen.episode.title}
+                        </Badge>
+                      </Link>
+                    )}
                     {/* Parameter names differ per model, so render whatever was
                         recorded. Rows from before multi-model support fall back
                         to the legacy SILMA columns. */}

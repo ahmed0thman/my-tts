@@ -6,7 +6,7 @@ parameter schema, and the UI renders controls from that. No frontend change.
 
 from typing import Any, Dict, List
 
-from engines import ChatterboxEngine, HiggsEngine, SilmaEngine, VoiceTutEngine
+import engines
 
 # This branch runs VoiceTut only — it is the model that actually clones a
 # user's voice. The other adapters are left on disk and unregistered rather
@@ -17,16 +17,18 @@ from engines import ChatterboxEngine, HiggsEngine, SilmaEngine, VoiceTutEngine
 DEFAULT_MODEL_ID = "voicetut"
 
 
+# Adapter classes are looked up by name on `engines`, which imports them on
+# first access — so an unregistered model's runtime is never imported, and the
+# desktop bundle can leave it out entirely.
+_ENGINE_CLASS = {"silma": "SilmaEngine", "masri-higgs": "HiggsEngine", "voicetut": "VoiceTutEngine"}
+
+
 def _build(engine_id: str, device: str):
-    if engine_id == "silma":
-        return SilmaEngine(device)
-    if engine_id == "masri-higgs":
-        return HiggsEngine(device)
-    if engine_id == "voicetut":
-        return VoiceTutEngine(device)
+    if engine_id in _ENGINE_CLASS:
+        return getattr(engines, _ENGINE_CLASS[engine_id])(device)
 
     variant = _CHATTERBOX_VARIANTS[engine_id]
-    return ChatterboxEngine(device, engine_id=engine_id, **variant)
+    return engines.ChatterboxEngine(device, engine_id=engine_id, **variant)
 
 
 _CHATTERBOX_VARIANTS: Dict[str, Dict[str, str]] = {
@@ -63,16 +65,11 @@ def describe_all(device: str) -> List[Dict[str, Any]]:
     Driven by MODEL_IDS, so unlisting a model removes it from the UI in one
     place instead of here as well.
     """
-    builders = {
-        "silma": SilmaEngine.describe,
-        "masri-higgs": HiggsEngine.describe,
-        "voicetut": VoiceTutEngine.describe,
-    }
     out: List[Dict[str, Any]] = []
     for engine_id in MODEL_IDS:
-        if engine_id in builders:
-            out.append(builders[engine_id]())
+        if engine_id in _ENGINE_CLASS:
+            out.append(getattr(engines, _ENGINE_CLASS[engine_id]).describe())
         else:
             variant = _CHATTERBOX_VARIANTS[engine_id]
-            out.append(ChatterboxEngine(device, engine_id=engine_id, **variant).describe_instance())
+            out.append(engines.ChatterboxEngine(device, engine_id=engine_id, **variant).describe_instance())
     return out

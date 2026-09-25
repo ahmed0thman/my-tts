@@ -9,28 +9,67 @@
  * for rather than assumed ready, report progress while the model loads, and —
  * the part that actually bites — die when the app quits. Orphaned `next dev`
  * processes holding port 3000 have been a recurring nuisance in this project.
+ *
+ * Neither server claims a well-known port any more. The engine listens on a
+ * Unix domain socket inside the data root, and the web server takes whatever
+ * port the OS hands out, bound to loopback — only this app's own window ever
+ * loads it, so nobody needs to know the number.
  */
 
 const { spawn } = require('node:child_process');
+const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
 const fs = require('node:fs');
 
-// Overridable so the supervisor can be exercised without disturbing servers
-// already running on the standard ports.
-const ENGINE_PORT = Number(process.env.TTS_ENGINE_PORT || 8000);
-const WEB_PORT = Number(process.env.TTS_WEB_PORT || 3000);
+/**
+ * sun_path is 104 bytes on macOS, including the terminator. A data root deep
+ * enough to overflow it fails at bind() with a bare EINVAL, so check up front
+ * and say what to do instead.
+ */
+const MAX_SOCKET_PATH_BYTES = 103;
+
+/**
+ * Where the engine listens. Same derivation as tts-engine/main.py,
+ * scripts/dev.sh and src/lib/tts-client.ts; SAWTAK_ENGINE_SOCKET overrides all
+ * four.
+ */
+function engineSocketPath(dataRoot) {
+  const socketPath =
+    process.env.SAWTAK_ENGINE_SOCKET || path.join(dataRoot, 'storage', 'run', 'engine.sock');
+  if (Buffer.byteLength(socketPath) > MAX_SOCKET_PATH_BYTES) {
+    throw new Error(
+      `مسار الـ socket طويل زيادة عن اللزوم (${Buffer.byteLength(socketPath)} بايت، والحد ${MAX_SOCKET_PATH_BYTES}):\n${socketPath}\n\n` +
+        'شغّل التطبيق و SAWTAK_ENGINE_SOCKET مظبوطة على مسار أقصر، زي /tmp/sawtak-engine.sock',
+    );
+  }
+  return socketPath;
+}
+
+/**
+ * uvicorn chmods the socket 0666, so the directory is what keeps other users
+ * on the machine out. Created — and re-tightened if it already existed — 0700.
+ *
+ * Call only after isSocketLive() said no: any file left at the path is then a
+ * stale socket from a run that died, and uvicorn in --reload mode fails with
+ * EADDRINUSE instead of replacing it.
+ */
+function prepareSocketDir(socketPath) {
+  const dir = path.dirname(socketPath);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(dir, 0o700);
+  } catch (error) {
+    // An override into a shared directory (/tmp) is not ours to lock down;
+    // whoever chose it chose its permissions too.
+    log(`socket directory left as is (${error.code}): ${dir}`);
+  }
+  fs.rmSync(socketPath, { force: true });
+}
 
 /** The engine downloads weights on a cold machine, so this is generous. */
 const ENGINE_READY_TIMEOUT_MS = 10 * 60 * 1000;
 const WEB_READY_TIMEOUT_MS = 90 * 1000;
-
-/**
- * Where a user who followed the published install instructions put the project.
- * Keep this in sync with the `git clone` line on the landing page — they are
- * two halves of the same contract.
- */
-const DEFAULT_DATA_ROOT = path.join(require('node:os').homedir(), 'sawtak');
 
 const children = new Set();
 
@@ -38,10 +77,14 @@ function log(...args) {
   console.log('[supervisor]', ...args);
 }
 
-/** True when something is already listening — a leftover server, or another copy of the app. */
-function isPortOpen(port) {
+/**
+ * True when an engine is already answering on the socket — `./scripts/dev.sh`
+ * running alongside, say. A stale socket *file* from a crash is not live
+ * (connect fails with ECONNREFUSED); prepareSocketDir() clears it.
+ */
+function isSocketLive(socketPath) {
   return new Promise((resolve) => {
-    const socket = net.connect({ port, host: '127.0.0.1' });
+    const socket = net.connect({ path: socketPath });
     const done = (result) => {
       socket.destroy();
       resolve(result);
@@ -50,6 +93,74 @@ function isPortOpen(port) {
     socket.once('error', () => done(false));
     socket.setTimeout(700, () => done(false));
   });
+}
+
+/** GET over the engine socket; resolves with the parsed JSON on a 200. */
+function getOverSocket(socketPath, pathname) {
+  return new Promise((resolve, reject) => {
+    const request = http.get({ socketPath, path: pathname, timeout: 4000 }, (response) => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => (body += chunk));
+      response.on('end', () => {
+        if (response.statusCode !== 200) return reject(new Error(`HTTP ${response.statusCode}`));
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          resolve({});
+        }
+      });
+    });
+    request.on('timeout', () => request.destroy(new Error('timeout')));
+    request.on('error', reject);
+  });
+}
+
+async function waitForEngine(socketPath, timeoutMs, onWait) {
+  const startedAt = Date.now();
+  let lastError = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      return await getOverSocket(socketPath, '/api/health');
+    } catch (error) {
+      lastError = error;
+    }
+    if (onWait) onWait(Math.round((Date.now() - startedAt) / 1000));
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`Timed out waiting for the engine on ${socketPath}: ${lastError?.message ?? 'no response'}`);
+}
+
+function probePort(port) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => {
+      const { port: bound } = server.address();
+      server.close(() => resolve(bound));
+    });
+  });
+}
+
+/**
+ * A loopback port that is free right now.
+ *
+ * `preferred` first, because the page's localStorage (remembered model, save
+ * folder) is keyed by origin — a different port every launch would forget it
+ * every launch. When something else holds that port, any free one: a
+ * forgotten preference beats a collision. There is a window between closing
+ * this probe and Next binding the port, but it is milliseconds.
+ */
+async function findFreePort(preferred) {
+  if (preferred) {
+    try {
+      return await probePort(preferred);
+    } catch {
+      // taken — fall through to an OS-assigned port
+    }
+  }
+  return probePort(0);
 }
 
 async function waitForHttp(url, timeoutMs, onWait) {
@@ -134,76 +245,146 @@ function resolveRoot() {
 }
 
 /**
- * Where the *data* lives: the Python virtualenv, the SQLite database, and
- * `storage/` with every generated clip and voice reference.
+ * Everything that differs between running from a checkout and running as an
+ * installed app, decided in one place.
  *
- * This is deliberately NOT inside the .app. The virtualenv cannot go in one —
- * `venv/bin/python` is a symlink to a uv-managed interpreter outside the repo,
- * and a venv records absolute paths, so copying it into the bundle produces a
- * build that only works on the machine that made it. The database and
- * `storage/` stay out for a better reason: `VoiceProfile.referenceAudioPath`
- * holds absolute paths, so moving them would orphan every voice the user has
- * already recorded.
+ * Installed, the app is self-contained. Its Python runtime and engine code
+ * ship inside the bundle (Contents/Resources/python, …/engine — built by
+ * scripts/build-python-runtime.sh), and its data lives in the standard
+ * per-user location, ~/Library/Application Support/Sawtak: the database,
+ * storage/ with every clip and voice reference, and the engine socket. Nothing
+ * refers back to the repository it was built from, and deleting or re-cloning
+ * the repo cannot touch it.
  *
- * Candidates are tried in order and **each one is checked on disk**, because
- * the most specific of them is also the least portable: the build machine's
- * own path, written into `electron/data-root.json` by
- * scripts/prepare-desktop-build.mjs. Returning that unvalidated is what made
- * an installed .app look for the venv inside the *packager's* home directory
- * on someone else's Mac, and fail with their username in the error. So the
- * baked path now has to exist to win, and DEFAULT_DATA_ROOT — the location the
- * published install instructions tell people to clone into — catches everyone
- * else. SAWTAK_DATA_ROOT overrides the lot.
+ * From a checkout (`npm run electron`), it is the developer's setup: the repo's
+ * venv, the repo's tts-engine/, and the repo's own database and storage/ — the
+ * same ones scripts/dev.sh uses. SAWTAK_DATA_ROOT overrides the data folder in
+ * either mode.
  */
-function dataRootCandidates() {
-  return [
-    process.env.SAWTAK_DATA_ROOT,
-    // In development this file sits at <repo>/electron/, so the repo is right here.
-    path.resolve(__dirname, '..'),
-    readBakedDataRoot(),
-    DEFAULT_DATA_ROOT,
-  ].filter(Boolean);
-}
+function resolveLayout(app) {
+  const root = resolveRoot();
 
-function readBakedDataRoot() {
-  try {
-    const baked = JSON.parse(fs.readFileSync(path.join(__dirname, 'data-root.json'), 'utf8'));
-    return baked.dataRoot || null;
-  } catch {
-    return null;
+  if (app.isPackaged) {
+    const resources = process.resourcesPath;
+    const dataRoot = process.env.SAWTAK_DATA_ROOT || app.getPath('userData');
+    return {
+      packaged: true,
+      root,
+      dataRoot,
+      dbPath: path.join(dataRoot, 'sawtak.db'),
+      python: path.join(resources, 'python', 'bin', 'python3.11'),
+      engineDir: path.join(resources, 'engine'),
+    };
   }
+
+  const dataRoot = process.env.SAWTAK_DATA_ROOT || root;
+  return {
+    packaged: false,
+    root,
+    dataRoot,
+    dbPath: path.join(dataRoot, 'prisma', 'namaa.db'),
+    python: path.join(root, 'tts-engine', 'venv', 'bin', 'python'),
+    engineDir: path.join(root, 'tts-engine'),
+  };
 }
 
-/** A data root is only real if the engine's interpreter is actually in it. */
-function hasEngineVenv(root) {
-  return fs.existsSync(path.join(root, 'tts-engine', 'venv', 'bin', 'python'));
+/**
+ * Environment every Python process the app starts must carry.
+ *
+ * Python writes compiled bytecode (`__pycache__/`) next to the modules it
+ * imports. Inside the .app that means writing into the signed bundle — 2,600+
+ * files on the first run — which breaks its code signature: the next time
+ * macOS verifies it, a downloaded copy reads as "Sawtak is damaged", and that
+ * dialog, unlike the unsigned-developer one, has no "Open Anyway". The caches
+ * go to the data folder instead, so the bundle stays byte-for-byte as signed.
+ */
+function pythonEnv(layout) {
+  return layout.packaged
+    ? { PYTHONPYCACHEPREFIX: path.join(layout.dataRoot, 'cache', 'pycache') }
+    : {};
 }
 
-function resolveDataRoot() {
-  // An explicit override is obeyed even when it is wrong, so the failure names
-  // the path the user chose rather than silently using a different one.
-  if (process.env.SAWTAK_DATA_ROOT) return process.env.SAWTAK_DATA_ROOT;
+/**
+ * Run a Node CLI with Electron's own binary as the runtime. A double-clicked
+ * .app has no `node` on PATH — it does not inherit the user's shell at all.
+ */
+function runNodeScript(name, script, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = start(name, process.execPath, [script, ...args], {
+      ...options,
+      env: { ELECTRON_RUN_AS_NODE: '1', ...options.env },
+      onExit: (code) => (code === 0 ? resolve() : reject(new Error(`${name} exited with code ${code}`))),
+    });
+    child.on('error', reject);
+  });
+}
 
-  const candidates = dataRootCandidates();
-  const found = candidates.find(hasEngineVenv);
-  if (found) return found;
+/**
+ * Create the data folder and bring the database up to the app's schema.
+ *
+ * `prisma migrate deploy` applies whatever migrations in prisma/migrations the
+ * database has not seen — every one of them on first launch, only new ones
+ * after an update, none otherwise — so an installed app upgrades its own
+ * database instead of asking the user to run anything.
+ *
+ * Returns true when the database did not exist before, i.e. a first launch.
+ */
+async function prepareData(layout) {
+  fs.mkdirSync(path.join(layout.dataRoot, 'storage', 'audio'), { recursive: true });
+  fs.mkdirSync(path.join(layout.dataRoot, 'storage', 'voice-samples'), { recursive: true });
+  const isNew = !fs.existsSync(layout.dbPath);
 
-  // Nothing is set up yet. Report the documented location, since that is the
-  // one the setup instructions the user was given will create.
-  return DEFAULT_DATA_ROOT;
+  await runNodeScript(
+    'migrate',
+    path.join(layout.root, 'node_modules', 'prisma', 'build', 'index.js'),
+    ['migrate', 'deploy', '--schema', path.join(layout.root, 'prisma', 'schema.prisma')],
+    {
+      cwd: layout.root,
+      env: {
+        DATABASE_URL: `file:${layout.dbPath}`,
+        // No update banner, no telemetry ping from inside an installed app.
+        PRISMA_HIDE_UPDATE_MESSAGE: '1',
+        CHECKPOINT_DISABLE: '1',
+      },
+    },
+  );
+  return isNew;
+}
+
+/**
+ * A new install starts with VoiceTut's shipped speakers as voice profiles,
+ * rather than an empty voice list. Runs after the engine is up (the script
+ * fetches the small reference-speakers folder from the model repo) and in the
+ * background: the app is usable meanwhile, and a failure only means the list
+ * starts empty.
+ */
+function importBuiltinVoices(layout) {
+  start('voices', layout.python, [path.join(layout.engineDir, 'import_builtin_voices.py')], {
+    cwd: layout.engineDir,
+    env: {
+      ...pythonEnv(layout),
+      SAWTAK_ENGINE_DIR: layout.engineDir,
+      SAWTAK_DATA_ROOT: layout.dataRoot,
+      SAWTAK_DB_PATH: layout.dbPath,
+      HF_HUB_DISABLE_XET: '1',
+    },
+  });
 }
 
 module.exports = {
-  ENGINE_PORT,
-  WEB_PORT,
   ENGINE_READY_TIMEOUT_MS,
   WEB_READY_TIMEOUT_MS,
-  isPortOpen,
+  engineSocketPath,
+  prepareSocketDir,
+  isSocketLive,
+  waitForEngine,
+  findFreePort,
   waitForHttp,
   start,
   stopAll,
-  resolveRoot,
-  resolveDataRoot,
-  DEFAULT_DATA_ROOT,
+  resolveLayout,
+  pythonEnv,
+  prepareData,
+  importBuiltinVoices,
   log,
 };

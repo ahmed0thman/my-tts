@@ -22,10 +22,16 @@
     - `savedPath String?` — absolute path of the exported copy when a custom save folder was used.
     - `seed String?` — the engine's range (0..4294967295) overflows Int32 and Prisma's `BigInt` will not JSON-serialize through a Server Action.
     - `speed` / `cfgStrength` / `nfeStep` are **legacy SILMA columns**, kept only so pre-multi-model history keeps its detail. New rows leave them at their defaults and record everything in `params`.
+    - `episodeId String?` / `position Int?` — set when the row is an episode segment. `position` is the running-order slot; a retake keeps it, moving rewrites all slots. Cascade-deleted with the episode.
+  - `Project`: A container (channel, series, client) — `title`, `description`, `episodes`. No audio of its own.
+  - `Episode`: One finished piece of audio in a project. `title`, `description`, `kind` (`episode` | `short` | `other`), the voice it renders with (`modelId`, `voiceProfileId`, `params`, `outputDir`, remembered on every add/retake), `gapMs`, and the latest merge (`mergedAudioPath`, `mergedSavedPath`, `mergedDuration`, `mergedAt`, `mergedSignature`).
+  - Deleting a project cascades episodes → segments in the database; the actions delete the segment and merged files in storage/ explicitly (rows cascade, files do not), never an exported copy.
   - `Preset`: Saved parameter combinations, scoped to a model (`modelId`, `params`, `voiceProfileId`). Uniqueness is `@@unique([name, modelId])`, not a global unique on `name`: the same name ("سريع", "محايد") is a different combination per engine, and a global unique made saving the second model's copy fail with P2002. `createPreset` maps that code to an Arabic message rather than leaking the Prisma error. The same three legacy columns are retained for presets saved before multi-model support. The seed is deliberately not part of a preset since it is per-take.
 - Indexes on `Generation`: `createdAt desc`, `voiceProfileId`, `status`.
-- Modification workflow:
+- Modification workflow — **migrations, not `db push`**:
   1. Edit `prisma/schema.prisma`.
-  2. Run `npx prisma db push` (for development synchronization) or `npx prisma migrate dev`.
-  3. Run `npx prisma generate` to refresh the TypeScript client.
-  4. Restart `next dev`.
+  2. Run `npx prisma migrate dev --name <change>`. This writes `prisma/migrations/<ts>_<change>/migration.sql`, applies it to the repo database and regenerates the client.
+  3. Restart `next dev`.
+- Why: the desktop app runs `prisma migrate deploy` on every launch against `~/Library/Application Support/Sawtak/sawtak.db`. A change made with `db push` has no migration file, so installed apps never receive it and break on the next query that uses it.
+- `0_init` is the baseline (the schema as of Projects → Episodes). Databases created before it were marked applied with `prisma migrate resolve --applied 0_init`.
+- The `prisma` CLI is a runtime dependency (not dev) because the packaged app runs it.

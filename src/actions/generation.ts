@@ -1,37 +1,11 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { generateSpeech, listModels } from '@/lib/tts-client';
 import { generateSchema } from '@/lib/validations';
 import { revalidatePath } from 'next/cache';
-import fs from 'fs/promises';
-import path from 'path';
 import { DEFAULT_MODEL_ID } from '@/lib/models';
-
-/**
- * The chosen model's cloning contract: whether it needs the transcription as
- * well as the clip, and how long a clip it can actually use.
- *
- * Both come from the engine's own `describe()` rather than being restated
- * here, so re-registering a model with a different cap needs no change in the
- * frontend.
- */
-async function modelCloningContract(
-  modelId: string,
-): Promise<{ requiresReferenceText: boolean; maxReferenceSeconds: number | null }> {
-  try {
-    const { models } = await listModels();
-    const model = models.find((m) => m.id === modelId);
-    return {
-      requiresReferenceText: model?.requiresReferenceText ?? false,
-      maxReferenceSeconds: model?.maxReferenceSeconds ?? null,
-    };
-  } catch {
-    // If the engine is unreachable the generate call will fail anyway; do not
-    // block on this lookup.
-    return { requiresReferenceText: false, maxReferenceSeconds: null };
-  }
-}
+import { renderGeneration, resolveVoiceReference, type RenderResult } from '@/lib/render';
+import { deleteStoredAudio } from '@/lib/storage';
 
 interface CreateGenerationInput {
   text: string;
@@ -48,7 +22,7 @@ interface CreateGenerationInput {
  * Create a new TTS generation.
  * Accepts either FormData or a plain object for flexibility.
  */
-export async function createGeneration(input: FormData | CreateGenerationInput) {
+export async function createGeneration(input: FormData | CreateGenerationInput): Promise<RenderResult> {
   try {
     // Parse input - handle both FormData and plain objects
     let rawData: CreateGenerationInput;
@@ -70,44 +44,12 @@ export async function createGeneration(input: FormData | CreateGenerationInput) 
 
     const validatedData = generateSchema.parse(rawData);
 
-    // Look up the voice profile's reference clip and its transcription. Only
-    // models that declare requiresReferenceText need the text; the engine
-    // rejects the call if it is missing, so we surface a clear message first.
-    let referenceAudioPath: string | undefined;
-    let referenceText: string | undefined;
-    if (validatedData.voiceProfileId) {
-      const profile = await prisma.voiceProfile.findUnique({
-        where: { id: validatedData.voiceProfileId },
-      });
-      if (profile?.referenceAudioPath) {
-        const { requiresReferenceText, maxReferenceSeconds } = await modelCloningContract(
-          validatedData.modelId,
-        );
-        if (requiresReferenceText && !profile.referenceText?.trim()) {
-          return {
-            success: false,
-            error: `الصوت "${profile.name}" ناقصه نص العينة، والنموذج المختار محتاجه. افتحه من صفحة الأصوات واكتب اللي اتقال في التسجيل.`,
-          };
-        }
-        // The engine refuses an over-long clip too, but only after the request
-        // has travelled and a PENDING row exists. Catching it here costs one
-        // lookup and gives the user the number that is wrong.
-        if (
-          maxReferenceSeconds !== null &&
-          profile.duration !== null &&
-          profile.duration > maxReferenceSeconds
-        ) {
-          return {
-            success: false,
-            error: `الصوت "${profile.name}" طوله ${profile.duration.toFixed(1)} ثانية، والنموذج بيشتغل صح لحد ${maxReferenceSeconds} ثواني. العيّنة الأطول بتخلّي النموذج يعيد كلام العيّنة نفسها وميقراش أول النص — سجّل عيّنة أقصر من صفحة الأصوات.`,
-          };
-        }
-        referenceAudioPath = profile.referenceAudioPath;
-        referenceText = profile.referenceText || undefined;
-      }
+    // Refuse a profile the model cannot use before a PENDING row exists.
+    const reference = await resolveVoiceReference(validatedData.voiceProfileId, validatedData.modelId);
+    if (!reference.ok) {
+      return { success: false, error: reference.error };
     }
 
-    // Create the generation record as PENDING
     const generation = await prisma.generation.create({
       data: {
         text: validatedData.text,
@@ -118,52 +60,9 @@ export async function createGeneration(input: FormData | CreateGenerationInput) 
       },
     });
 
-    try {
-      // Update to PROCESSING
-      await prisma.generation.update({
-        where: { id: generation.id },
-        data: { status: 'PROCESSING' },
-      });
-
-      // Call the TTS engine
-      const result = await generateSpeech({
-        text: validatedData.text,
-        modelId: validatedData.modelId,
-        voiceProfilePath: referenceAudioPath,
-        referenceText,
-        params: validatedData.params,
-        outputDir: validatedData.outputDir,
-      });
-
-      // Update to COMPLETED with the audio metadata
-      const updatedGeneration = await prisma.generation.update({
-        where: { id: generation.id },
-        data: {
-          status: 'COMPLETED',
-          audioPath: result.audio_path,
-          savedPath: result.saved_path || null,
-          seed: result.seed || null,
-          duration: result.duration,
-          fileSize: result.file_size,
-        },
-        include: { voiceProfile: true },
-      });
-
-      revalidatePath('/');
-      return { success: true, data: updatedGeneration };
-    } catch (error: any) {
-      // Update to FAILED
-      const failedGeneration = await prisma.generation.update({
-        where: { id: generation.id },
-        data: {
-          status: 'FAILED',
-          error: error.message || 'Unknown error occurred during generation',
-        },
-        include: { voiceProfile: true },
-      });
-      revalidatePath('/');
-      return { success: false, data: failedGeneration, error: error.message };
-    }
+    const result = await renderGeneration(generation.id, { outputDir: validatedData.outputDir });
+    revalidatePath('/');
+    return result;
   } catch (error: any) {
     return { success: false, error: error.message || 'Validation failed' };
   }
@@ -185,6 +84,7 @@ export async function getGenerations(params: { page?: number; pageSize?: number;
         take: pageSize,
         include: {
           voiceProfile: true,
+          episode: { select: { id: true, title: true, project: { select: { id: true, title: true } } } },
         },
       }),
       prisma.generation.count({ where }),
@@ -234,16 +134,9 @@ export async function deleteGeneration(id: string) {
       return { success: false, error: 'Generation not found' };
     }
 
-    // Try to delete the audio file from disk
-    if (generation.audioPath) {
-      try {
-        const audioDir = path.resolve(process.cwd(), 'storage');
-        const fullPath = path.join(audioDir, generation.audioPath.replace(/^\/storage\//, ''));
-        await fs.unlink(fullPath);
-      } catch (e) {
-        console.warn(`Could not delete audio file: ${generation.audioPath}`, e);
-      }
-    }
+    // storage/ is resolved against the data root, not cwd — inside the
+    // packaged app cwd is the bundle and holds no storage/.
+    await deleteStoredAudio(generation.audioPath);
 
     await prisma.generation.delete({
       where: { id },
@@ -256,7 +149,7 @@ export async function deleteGeneration(id: string) {
   }
 }
 
-export async function retryGeneration(id: string) {
+export async function retryGeneration(id: string): Promise<RenderResult> {
   try {
     const original = await prisma.generation.findUnique({
       where: { id },

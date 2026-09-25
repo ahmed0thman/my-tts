@@ -83,6 +83,8 @@ build/icons/*
 # Electron build output
 dist-electron/
 
-# Written at build time by scripts/prepare-desktop-build.mjs — holds an
-# absolute path that is only meaningful on the machine that built the app.
-electron/data-root.json
+# Bundled Python for the desktop app — scripts/build-python-runtime.sh
+build/python-runtime/
+
+# Engine socket (storage/run/engine.sock) — runtime only
+storage/run/

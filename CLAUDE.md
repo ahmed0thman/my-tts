@@ -25,6 +25,36 @@ A production-grade local control board for text-to-speech and zero-shot voice cl
 > from). They moved independently the moment the registry changed — keep them
 > apart.
 
+## Projects → Episodes → Segments
+A **project** (`/projects`) is a container — a channel, a series, a client —
+with a title and description and no audio of its own. Inside it live
+**episodes** (`/projects/[id]/episodes/[episodeId]`): each one finished piece of
+audio, of kind `episode` / `short` / `other`. An episode has its own remembered
+voice settings and an ordered list of **segments** (`Generation` rows with
+`episodeId` + `position`). Paste a script, split it by line or paragraph, queue
+it, render it one segment at a time, review and retake any segment in place,
+reorder, then merge into one WAV via the engine's `POST /api/merge`. A new
+episode copies the voice of the project's most recently edited one. Details in
+`.claude/rules/architecture.md` → Projects.
+
+## Desktop App (standalone)
+The installed `Sawtak.app` is self-contained and **never touches the repo**:
+- **Code**: the compiled Next app, a relocatable CPython 3.11 with VoiceTut's
+  packages only (`Contents/Resources/python`, built by
+  `scripts/build-python-runtime.sh` from `tts-engine/requirements-desktop.txt`),
+  and the engine's `.py` files (`Contents/Resources/engine`).
+- **Data**: `~/Library/Application Support/Sawtak/` — `sawtak.db`, `storage/`
+  (audio, voice samples, the engine socket). Created on first launch, which also
+  imports VoiceTut's built-in speakers.
+- **Schema**: every launch runs `prisma migrate deploy` against that database,
+  so schema changes **must** ship as migrations (`npx prisma migrate dev`), not
+  `db push` — a `db push` change never reaches installed apps.
+- A checkout (`npm run electron`, `dev.sh`) keeps using the repo's venv,
+  `prisma/namaa.db` and `storage/`. `scripts/move-data-to-app.sh` copies a
+  checkout's data into the app folder once.
+- `npm run electron:dist` → `dist-electron/Sawtak-<version>-arm64.dmg` (~440 MB;
+  model weights download to `~/.cache/huggingface` on first launch).
+
 ## Multi-Model Architecture
 - Each backend is an adapter under `tts-engine/engines/` implementing `TTSEngine` (`load`, `generate`, `unload`, capability declaration).
 - `tts-engine/model_registry.py` is the single place a model is registered. `GET /api/models` serves each model's capabilities **and its parameter schema**, and the UI renders its sliders from that — **adding a model requires no frontend change**.
@@ -44,21 +74,21 @@ All five models clone zero-shot from a reference clip, and they differ:
 - **Web App**: Next.js 15 (App Router), React 19, TypeScript strict mode, RTL Arabic (Cairo font).
 - **TTS Engine**: Python **3.11** FastAPI server running all five models on Apple Silicon MPS (Metal). 3.11 is mandatory — silma-tts pins `numpy<=1.26.4`, which has no wheels for 3.12/3.13.
 - **Database**: **SQLite** at `prisma/namaa.db` via Prisma ORM (`prisma/schema.prisma`). No server and no Docker — the container's VM held ~2GB that the 4B Higgs model needs. Prisma 6.19 supports `enum` and `Json` on SQLite, so only the datasource provider changed.
-- **Communication**: Next.js Server Actions call FastAPI (`http://localhost:8000/api/*`) via `src/lib/tts-client.ts`.
+- **Communication**: Next.js Server Actions call FastAPI over a **Unix domain socket** (`storage/run/engine.sock`, override `SAWTAK_ENGINE_SOCKET`) via `src/lib/tts-client.ts`. No port for the engine, so no collisions; the web server takes a free loopback port (OS-assigned in the desktop app, 43117 and up in `dev.sh`).
 - **Audio Storage**: Persistent filesystem storage in `storage/audio/` and `storage/voice-samples/`, streamed via Next.js route `src/app/api/audio/[...path]/route.ts`.
 
 ## Core Commands
 - **Full Setup**: `./scripts/setup.sh` (validates Node 24+ / uv / Homebrew, installs `openfst` + `ffmpeg`, creates the Python 3.11 venv, stages the SILMA install, creates the SQLite database, pre-downloads ~19GB of weights)
-- **Dev Servers**: `./scripts/dev.sh` (FastAPI on port 8000, Next.js on port 3000)
+- **Dev Servers**: `./scripts/dev.sh` (FastAPI on the socket, Next.js on the first free port from 43117 — it prints the URL)
 - **Next.js Dev Only**: `npm run dev`
 - **Next.js Build**: `npm run build`
 - **Type Check**: `npx tsc --noEmit`
 - **Database Studio**: `npx prisma studio`
-- **Database Schema Push**: `npx prisma db push`
+- **Database Schema Change**: `npx prisma migrate dev --name <change>` (installed apps apply migrations on launch; `db push` would never reach them)
 - **Python Fast-Check**: `tts-engine/venv/bin/python -m py_compile tts-engine/*.py tts-engine/engines/*.py`
 - **Engine Import Checks**: `tts-engine/venv/bin/python -c 'from silma_tts.api import SilmaTTS'` and
   `tts-engine/venv/bin/python -c 'from chatterbox.mtl_tts import ChatterboxMultilingualTTS'`
-- **Live Model List**: `curl -s localhost:8000/api/models` (also reports which one is resident)
+- **Live Model List**: `curl -s --unix-socket storage/run/engine.sock http://e/api/models` (also reports which one is resident)
 
 ## Installing the Engine (why it is not just `pip install silma-tts`)
 `pip install silma-tts` **fails on macOS**. Three separate incompatibilities, all handled by `scripts/setup.sh` and documented at the top of `tts-engine/requirements.txt`:

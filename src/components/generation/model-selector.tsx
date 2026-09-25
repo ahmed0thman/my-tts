@@ -15,9 +15,16 @@ const STORAGE_KEY = 'namaa:model-id';
 interface ModelSelectorProps {
   /** Fires when the active model changes, so siblings can react. */
   onModelChange?: (model: TtsModel | undefined) => void;
+  /**
+   * Restore the last-used model from localStorage, and remember new choices
+   * there. Off where the form was seeded from somewhere more specific — a
+   * project's own saved voice — which the restore would otherwise overwrite,
+   * params and all.
+   */
+  restoreSaved?: boolean;
 }
 
-export function ModelSelector({ onModelChange }: ModelSelectorProps) {
+export function ModelSelector({ onModelChange, restoreSaved = true }: ModelSelectorProps) {
   const { control, setValue, watch } = useFormContext();
   const { data, isLoading } = useModels();
 
@@ -28,7 +35,7 @@ export function ModelSelector({ onModelChange }: ModelSelectorProps) {
   // Restore the last used model across sessions — but only once the registry
   // has arrived, so a saved id can be checked against the models that actually
   // exist (one may have been removed since it was stored).
-  const hasRestored = useRef(false);
+  const hasRestored = useRef(!restoreSaved);
   useEffect(() => {
     if (hasRestored.current || models.length === 0) return;
     hasRestored.current = true;
@@ -60,6 +67,7 @@ export function ModelSelector({ onModelChange }: ModelSelectorProps) {
     // model's declared defaults rather than carrying stale keys across.
     setValue('params', defaultParamsFor(next), { shouldDirty: true });
 
+    if (!restoreSaved) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, nextId);
     } catch {

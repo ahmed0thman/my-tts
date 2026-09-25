@@ -1,0 +1,30 @@
+# What the desktop app bundles: the VoiceTut engine and nothing else.
+#
+# requirements.txt installs every adapter on disk (SILMA, both NAMAA
+# Chatterbox fine-tunes, Masri Higgs) for development. The packaged app only
+# runs the registered model, so it carries only VoiceTut's runtime — about a
+# third of the dev venv. scripts/build-python-runtime.sh installs this into a
+# relocatable CPython that ships inside Sawtak.app.
+#
+# Pins match requirements.txt: torch/torchaudio/transformers are the set the
+# dev venv is tested with, and numpy stays below 2 for the same reason.
+fastapi
+uvicorn
+python-multipart
+pydantic>=2.0
+aiofiles
+torch==2.6.0
+torchaudio==2.6.0
+transformers==5.2.0
+huggingface_hub
+safetensors
+numpy<=1.26.4
+soundfile
+# Imported on VoiceTut's inference path (found by running it from a bare
+# interpreter; its declared deps are mostly the training stack).
+pydub
+tqdm
+# accelerate's own deps — it is installed --no-deps below with the others.
+packaging
+psutil
+pyyaml

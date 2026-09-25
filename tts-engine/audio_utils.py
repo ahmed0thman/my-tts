@@ -147,3 +147,44 @@ def build_shortcuts(default_dir: str) -> list:
         {"label": "الموسيقى", "path": os.path.join(home, "Music")},
     ]
     return [c for c in candidates if os.path.isdir(c["path"])]
+
+
+def merge_clips(paths: list, gap_seconds: float = 0.3):
+    """Concatenates clips in the given order with a silence gap between them.
+
+    Used to assemble a project's segments into one episode. Clips are mixed
+    down to mono and resampled to the first clip's rate, so segments rendered
+    by different models (different sample rates) still join cleanly — the
+    registry is allowed to change between the first segment and the last.
+
+    Returns (tensor [1, n], sample_rate).
+    """
+    import torch
+
+    if not paths:
+        raise ValueError("No clips to merge")
+
+    target_rate = None
+    pieces = []
+    for index, clip_path in enumerate(paths):
+        wav, rate = torchaudio.load(clip_path)
+        if wav.shape[0] > 1:
+            wav = wav.mean(dim=0, keepdim=True)
+        if target_rate is None:
+            target_rate = rate
+        elif rate != target_rate:
+            wav = torchaudio.functional.resample(wav, rate, target_rate)
+        if index > 0 and gap_seconds > 0:
+            pieces.append(torch.zeros(1, int(round(gap_seconds * target_rate))))
+        pieces.append(wav)
+
+    return torch.cat(pieces, dim=1), target_rate
+
+
+def safe_export_name(hint: Optional[str], fallback: str = "episode") -> str:
+    """A filename stem from a user-facing title — Arabic kept, path syntax dropped."""
+    import re
+
+    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", (hint or "").strip())
+    stem = re.sub(r"\s+", " ", stem).strip(" ._")[:80]
+    return stem or fallback

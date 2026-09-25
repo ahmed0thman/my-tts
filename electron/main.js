@@ -20,24 +20,35 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const {
-  ENGINE_PORT,
-  WEB_PORT,
   ENGINE_READY_TIMEOUT_MS,
   WEB_READY_TIMEOUT_MS,
-  isPortOpen,
+  engineSocketPath,
+  prepareSocketDir,
+  isSocketLive,
+  waitForEngine,
+  findFreePort,
   waitForHttp,
   start,
   stopAll,
-  resolveRoot,
-  resolveDataRoot,
-  DEFAULT_DATA_ROOT,
+  resolveLayout,
+  pythonEnv,
+  prepareData,
+  importBuiltinVoices,
   log,
 } = require('./processes');
 
-const ROOT = resolveRoot();
-// The engine, the database and storage/ live outside the .app — see
-// resolveDataRoot() for why.
-const DATA_ROOT = resolveDataRoot();
+// Where the code, the Python runtime and the data are — inside the bundle and
+// ~/Library/Application Support/Sawtak when installed, the repo in a checkout.
+// See resolveLayout().
+const LAYOUT = resolveLayout(app);
+const ROOT = LAYOUT.root;
+const DATA_ROOT = LAYOUT.dataRoot;
+
+/**
+ * The port the window prefers, so the page's localStorage (keyed by origin)
+ * survives restarts. Anything free is used when it is taken.
+ */
+const PREFERRED_WEB_PORT = 43117;
 // Packaged builds always serve the compiled app. TTS_FORCE_PROD lets the
 // production path be exercised from a checkout, which is otherwise only
 // reachable by building a full .app.
@@ -94,6 +105,9 @@ function windowIcon() {
 
 let splash = null;
 let mainWindow = null;
+/** Resolved in whenReady: the engine's socket, and the loopback origin Next serves on. */
+let engineSocket = null;
+let webOrigin = null;
 /** Set once we decide to exit, so a supervised child dying does not also raise an error dialog. */
 let quitting = false;
 
@@ -135,7 +149,7 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.loadURL(`http://localhost:${WEB_PORT}`);
+  mainWindow.loadURL(webOrigin);
 
   // `hiddenInset` removes the native title bar, and macOS then has nothing to
   // drag the window by — Electron does not make that strip draggable on its
@@ -162,7 +176,7 @@ function createMainWindow() {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(`http://localhost:${WEB_PORT}`)) {
+    if (!url.startsWith(webOrigin)) {
       event.preventDefault();
       shell.openExternal(url);
     }
@@ -173,42 +187,38 @@ function createMainWindow() {
   });
 }
 
-function pythonBinary() {
-  const venv = path.join(DATA_ROOT, 'tts-engine', 'venv', 'bin', 'python');
-  if (fs.existsSync(venv)) return venv;
-  return null;
-}
 
 async function startEngine() {
-  if (await isPortOpen(ENGINE_PORT)) {
+  engineSocket = engineSocketPath(DATA_ROOT);
+  if (await isSocketLive(engineSocket)) {
     say('لقينا النموذج شغّال بالفعل');
     return;
   }
 
-  const python = pythonBinary();
-  if (!python) {
-    // Written in Arabic and as shell lines the user can paste, because this is
-    // the first thing a brand-new install hits: the .app ships without the
-    // Python engine, and this dialog is the only place that says so.
+  if (!fs.existsSync(LAYOUT.python)) {
     throw new Error(
-      `مفيش نموذج صوت متظبط على الجهاز.\n\n` +
-      `التطبيق بيدوّر على:\n${path.join(DATA_ROOT, 'tts-engine', 'venv')}\n\n` +
-      `افتح الترمينال والصق:\n\n` +
-      `git clone -b voicetut https://github.com/ahmed0thman/my-tts.git ${DEFAULT_DATA_ROOT}\n` +
-      `cd ${DEFAULT_DATA_ROOT} && ./scripts/setup.sh\n\n` +
-      `ولو ظبّطته في مكان تاني، شغّل التطبيق و SAWTAK_DATA_ROOT مظبوطة عليه.`
+      LAYOUT.packaged
+        ? `نسخة التطبيق دي ناقصها محرك الصوت:\n${LAYOUT.python}\n\nنزّل التطبيق تاني.`
+        : `مفيش بيئة Python للمحرك في:\n${LAYOUT.python}\n\nشغّل ./scripts/setup.sh الأول.`,
     );
   }
 
   say('بنشغّل نموذج الصوت...');
-  start('engine', python, ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(ENGINE_PORT)], {
-    cwd: path.join(DATA_ROOT, 'tts-engine'),
+  prepareSocketDir(engineSocket);
+  start('engine', LAYOUT.python, ['-m', 'uvicorn', 'main:app', '--uds', engineSocket], {
+    cwd: LAYOUT.engineDir,
+    env: {
+      ...pythonEnv(LAYOUT),
+      SAWTAK_ENGINE_SOCKET: engineSocket,
+      SAWTAK_DATA_ROOT: DATA_ROOT,
+      HF_HUB_DISABLE_XET: '1',
+    },
     onExit: (code) => {
       if (!quitting && code !== 0) fail(`The speech engine stopped unexpectedly (exit ${code}).`);
     },
   });
 
-  await waitForHttp(`http://127.0.0.1:${ENGINE_PORT}/api/health`, ENGINE_READY_TIMEOUT_MS, (seconds) => {
+  await waitForEngine(engineSocket, ENGINE_READY_TIMEOUT_MS, (seconds) => {
     if (seconds && seconds % 5 === 0) {
       say(`بنحمّل النموذج... (${seconds} ثانية)`);
     }
@@ -217,12 +227,12 @@ async function startEngine() {
 }
 
 async function startWeb() {
-  if (await isPortOpen(WEB_PORT)) {
-    say('لقينا الواجهة شغّالة بالفعل');
-    return;
-  }
-
   say('بنشغّل الواجهة...');
+
+  // No fixed port to reuse or collide with: the OS picks one, and only this
+  // window ever loads it. Bound to loopback so nothing else on the network can.
+  const port = await findFreePort(PREFERRED_WEB_PORT);
+  webOrigin = `http://127.0.0.1:${port}`;
 
   // Electron's own binary, run as plain Node. A packaged app cannot assume a
   // `node` or `npx` on PATH — a double-clicked .app does not inherit the
@@ -230,7 +240,7 @@ async function startWeb() {
   const nextBin = path.join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
   // `next start` needs a production build; in development `next dev` is both
   // faster to boot and what the repo is set up for.
-  const args = [nextBin, isDev ? 'dev' : 'start', '--port', String(WEB_PORT)];
+  const args = [nextBin, isDev ? 'dev' : 'start', '--hostname', '127.0.0.1', '--port', String(port)];
   start('web', process.execPath, args, {
     cwd: ROOT,
     env: {
@@ -240,10 +250,13 @@ async function startWeb() {
       // has none — the connection string has to be handed over explicitly,
       // and as an absolute path, since the relative form resolves against
       // prisma/.
-      DATABASE_URL: `file:${path.join(DATA_ROOT, 'prisma', 'namaa.db')}`,
-      // The audio route serves storage/ from here rather than from its own
-      // cwd, which inside the .app is the bundle and holds no storage/.
+      DATABASE_URL: `file:${LAYOUT.dbPath}`,
+      // The audio route and file deletions resolve storage/ from here rather
+      // than from their cwd, which inside the .app is the bundle.
       SAWTAK_DATA_ROOT: DATA_ROOT,
+      // The engine address; tts-client.ts would derive the same path from
+      // SAWTAK_DATA_ROOT, but an override set on the app must reach it too.
+      SAWTAK_ENGINE_SOCKET: engineSocket,
       NEXT_TELEMETRY_DISABLED: '1',
     },
     onExit: (code) => {
@@ -251,9 +264,9 @@ async function startWeb() {
     },
   });
 
-  await waitForHttp(`http://localhost:${WEB_PORT}`, WEB_READY_TIMEOUT_MS).catch(async () => {
+  await waitForHttp(webOrigin, WEB_READY_TIMEOUT_MS).catch(async () => {
     // The root route renders; a non-JSON body is fine, we only need a 200.
-    await waitForHttp(`http://localhost:${WEB_PORT}`, 10_000);
+    await waitForHttp(webOrigin, 10_000);
   });
   say('الواجهة جاهزة');
 }
@@ -267,11 +280,33 @@ function fail(message) {
   app.quit();
 }
 
+// A second copy would start a second Next server and attach to the same
+// engine; there is nothing it could do that the first window cannot. Focus
+// that one instead.
+const isPrimaryInstance = app.requestSingleInstanceLock();
+if (!isPrimaryInstance) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  });
+}
+
 app.whenReady().then(async () => {
+  // quit() is asynchronous; without this the losing copy would still get as
+  // far as spawning servers before it exits.
+  if (!isPrimaryInstance) return;
   applyDevIcon();
   createSplash();
   try {
+    say('بنجهّز البيانات...');
+    const firstLaunch = await prepareData(LAYOUT);
     await startEngine();
+    // Only a brand-new install, and only the packaged app — a checkout's
+    // database is the developer's to manage.
+    if (firstLaunch && LAYOUT.packaged) importBuiltinVoices(LAYOUT);
     await startWeb();
     createMainWindow();
   } catch (error) {
@@ -283,8 +318,8 @@ app.whenReady().then(async () => {
   });
 });
 
-// Quitting must stop the servers, or the ports stay held and the next launch
-// silently attaches to a stale engine.
+// Quitting must stop the servers, or the engine keeps its socket and the next
+// launch silently attaches to a stale one.
 app.on('before-quit', () => {
   quitting = true;
   stopAll();

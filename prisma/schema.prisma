@@ -50,10 +50,63 @@ model Generation {
   status          GenerationStatus @default(PENDING)
   error           String?
   createdAt       DateTime         @default(now())
+  // Set when the clip is a segment of an episode. Studio clips leave both null.
+  episodeId       String?
+  episode         Episode?         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  // Slot in the episode's running order. Starts as creation order; a retake
+  // renders into the same row so it keeps its slot, and moving swaps slots.
+  position        Int?
 
   @@index([createdAt(sort: Desc)])
   @@index([voiceProfileId])
   @@index([status])
+  @@index([episodeId, position])
+}
+
+/// A container for related audio — a channel, a series, a client. Holds any
+/// number of episodes; it has no audio of its own.
+model Project {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  episodes    Episode[]
+
+  @@index([updatedAt(sort: Desc)])
+}
+
+/// One finished piece of audio inside a project — a long episode, a short, an
+/// ad read. Assembled from segments (Generation rows); merging joins their
+/// audio, in `position` order, into one WAV.
+model Episode {
+  id              String       @id @default(cuid())
+  projectId       String
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  kind            String       @default("episode")  // episode | short | other — see EPISODE_KINDS in src/lib/projects.ts
+  // The voice this episode renders with, so every segment sounds the same
+  // across sessions. A new episode copies it from the project's most recently
+  // edited episode.
+  modelId         String?
+  voiceProfileId  String?
+  params          Json?
+  outputDir       String?      // where the merged audio is exported; the segments stay in storage/audio
+  gapMs           Int          @default(350)  // silence inserted between segments when merging
+  // The latest merge. `mergedSignature` is the ordered list of segment ids and
+  // audio paths it was built from; when the segments no longer produce the
+  // same signature the merge is out of date.
+  mergedAudioPath String?
+  mergedSavedPath String?
+  mergedDuration  Float?
+  mergedAt        DateTime?
+  mergedSignature String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  segments        Generation[]
+
+  @@index([projectId, createdAt])
 }
 
 model Preset {

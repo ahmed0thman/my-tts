@@ -7,6 +7,8 @@ interface EngineStatus {
   modelLoaded?: boolean;
   device?: string;
   uptime?: number;
+  /** Where the Next server reaches the engine — `unix:/…/engine.sock` by default. */
+  address?: string;
 }
 
 export function useEngineStatus() {
@@ -15,8 +17,7 @@ export function useEngineStatus() {
     queryFn: async () => {
       try {
         // Proxied through our own origin — see src/app/api/engine-status/route.ts.
-        // Talking to the engine directly from the browser needs its CORS
-        // allowlist to name this exact port, which it does not.
+        // The engine listens on a Unix socket, which the browser cannot open.
         const response = await fetch('/api/engine-status');
         if (!response.ok) return { isOnline: false };
         return await response.json();

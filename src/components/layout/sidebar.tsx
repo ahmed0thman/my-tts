@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Music, Mic, History, Settings2, Settings, X } from 'lucide-react';
+import { Music, Mic, History, Settings2, Settings, X, FolderKanban } from 'lucide-react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { AiVoice01Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ interface SidebarProps {
 
 const LINKS = [
   { href: '/', label: 'إنشاء صوت', icon: Music },
+  { href: '/projects', label: 'المشاريع', icon: FolderKanban },
   { href: '/voices', label: 'الأصوات', icon: Mic },
   { href: '/history', label: 'السجل', icon: History },
   { href: '/presets', label: 'الإعدادات المسبقة', icon: Settings2 },
@@ -50,7 +51,9 @@ export function Sidebar({ onClose }: SidebarProps) {
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
         {LINKS.map((link) => {
           const Icon = link.icon;
-          const isActive = pathname === link.href;
+          // Nested routes (/projects/[id]) keep their section highlighted.
+          const isActive =
+            link.href === '/' ? pathname === '/' : pathname === link.href || pathname.startsWith(`${link.href}/`);
 
           return (
             <Link

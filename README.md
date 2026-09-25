@@ -184,11 +184,11 @@ and pre-downloads the weights so your first generation is not a long wait.
 ```bash
 ./scripts/dev.sh
 ```
-Starts the FastAPI engine on **:8000** and Next.js on **:3000**. Ctrl+C stops
+Starts the FastAPI engine on a Unix socket (`storage/run/engine.sock`, no port) and Next.js on the first free port from **43117**. Ctrl+C stops
 both. There is no database process to start.
 
-👉 **[http://localhost:3000](http://localhost:3000)**
-*(Swagger docs: [http://localhost:8000/docs](http://localhost:8000/docs))*
+👉 the URL `dev.sh` prints — **http://127.0.0.1:43117** unless something else holds it
+*(The engine has no port, so no Swagger in the browser; `curl --unix-socket storage/run/engine.sock http://e/openapi.json` gets the schema.)*
 
 ---
 
@@ -266,7 +266,7 @@ precisely so unregistering a model never relabels your history.
          │
          │  multipart HTTP — src/lib/tts-client.ts
          ▼
-[ FastAPI engine :8000 ]
+[ FastAPI engine  unix:storage/run/engine.sock ]
          │
          ├── model_registry.py ── the one place a model is registered
          │
@@ -326,7 +326,7 @@ my-tts/
 │   └── project-state.md            # full inventory & verified state
 ├── CLAUDE.md                       # root briefing file for agent sessions
 ├── tts-engine/                     # Python FastAPI sidecar
-│   ├── main.py                     # REST endpoints, CORS, HF_HUB_DISABLE_XET
+│   ├── main.py                     # REST endpoints (Unix socket), merge, HF_HUB_DISABLE_XET
 │   ├── model_registry.py           # ← the single place a model is registered
 │   ├── model_manager.py            # one-resident-model manager, MPS detection, locking
 │   ├── audio_utils.py              # validation, peak normalization, folder browsing
@@ -372,10 +372,10 @@ my-tts/
 | `npm run lint` | ESLint |
 | `npx tsc --noEmit` | TypeScript strict check (currently 0 errors) |
 | `npx prisma studio` | Visual database browser |
-| `npx prisma db push` | Create/refresh `prisma/namaa.db` from the schema |
+| `npx prisma migrate deploy` | Create/upgrade `prisma/namaa.db` from `prisma/migrations/` |
 | `tts-engine/venv/bin/python -m py_compile tts-engine/*.py tts-engine/engines/*.py` | Python syntax check |
-| `curl -s localhost:8000/api/models` | Registry + which model is resident |
-| `curl -s localhost:8000/api/progress` | Live state of the running generation |
+| `curl -s --unix-socket storage/run/engine.sock http://e/api/models` | Registry + which model is resident |
+| `curl -s --unix-socket storage/run/engine.sock http://e/api/progress` | Live state of the running generation |
 
 ---
 
@@ -480,11 +480,11 @@ The running `next dev` is holding a stale generated client. Restart Next.js —
 the Python engine can stay up.
 
 ### How do I confirm MPS acceleration is active?
-`/settings` shows the device badge, or `curl -s localhost:8000/api/health`.
+`/settings` shows the device badge, or `curl -s --unix-socket storage/run/engine.sock http://e/api/health`.
 
 ### Where is the database?
 `prisma/namaa.db` — one SQLite file, no server and no container. Back it up by
-copying it; `npx prisma db push` recreates it from scratch. It replaced a
+copying it; `npx prisma migrate deploy` recreates it from scratch. It replaced a
 dockerised PostgreSQL 17 because Docker Desktop's VM held ~2 GB the models are
 better off with. SQLite takes a write lock per transaction, which is fine for
 one person generating one clip at a time and is the first thing that would break

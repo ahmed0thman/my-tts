@@ -6,7 +6,6 @@ import torch
 
 import model_registry
 import progress
-from engines import ChatterboxEngine
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +60,11 @@ class ModelManager:
 
             def _load_sync():
                 # Dialect switches reuse the loaded Chatterbox base instead of
-                # re-downloading and re-instantiating the whole stack.
-                if isinstance(engine, ChatterboxEngine) and engine.adopt(previous):
+                # re-downloading and re-instantiating the whole stack. Only
+                # ChatterboxEngine has adopt(); checked by attribute so this
+                # module never imports an adapter the bundle may not carry.
+                adopt = getattr(engine, "adopt", None)
+                if adopt is not None and adopt(previous):
                     return engine
                 if previous is not None:
                     previous.unload()
