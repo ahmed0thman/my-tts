@@ -5,14 +5,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   addSegments,
+  applyVoiceToSegments,
   createEpisode,
   deleteEpisode,
   deleteSegment,
+  deleteSegments,
   getEpisode,
   mergeEpisode,
-  moveSegment,
+  reorderSegments,
   renderSegment,
   retakeSegment,
+  setSegmentVoice,
+  setVoiceForSegments,
   updateEpisode,
   updateSegmentText,
 } from '@/actions/episodes';
@@ -96,8 +100,14 @@ export function useAddSegments(episodeId: string) {
 export function useRetakeSegment(episodeId: string) {
   const invalidate = useInvalidateEpisode(episodeId);
   return useMutation({
-    mutationFn: async (input: { id: string; text?: string; settings?: RenderSettings }) =>
-      unwrap(await retakeSegment(input.id, { text: input.text, settings: input.settings })),
+    mutationFn: async (input: { id: string; text?: string; settings?: RenderSettings; voiceProfileId?: string | null }) =>
+      unwrap(
+        await retakeSegment(input.id, {
+          text: input.text,
+          settings: input.settings,
+          voiceProfileId: input.voiceProfileId,
+        }),
+      ),
     onSuccess: () => {
       invalidate();
       toast.success('اتولّد المقطع من جديد');
@@ -119,31 +129,47 @@ export function useUpdateSegmentText(episodeId: string) {
   });
 }
 
-export function useMoveSegment(episodeId: string) {
+export function useSetSegmentVoice(episodeId: string) {
+  const invalidate = useInvalidateEpisode(episodeId);
+  return useMutation({
+    mutationFn: async (input: { id: string; voiceProfileId: string | null }) =>
+      unwrap(await setSegmentVoice(input.id, input.voiceProfileId)),
+    onSuccess: invalidate,
+    onError: (error: Error) => toast.error(error.message),
+  });
+}
+
+export function useApplyVoiceToSegments(episodeId: string) {
+  const invalidate = useInvalidateEpisode(episodeId);
+  return useMutation({
+    mutationFn: async (voiceProfileId: string | null) => unwrap(await applyVoiceToSegments(episodeId, voiceProfileId)),
+    onSuccess: invalidate,
+    onError: (error: Error) => toast.error(error.message),
+  });
+}
+
+/** Drag and drop: the episode's segment ids in their new order. */
+export function useReorderSegments(episodeId: string) {
   const queryClient = useQueryClient();
   const invalidate = useInvalidateEpisode(episodeId);
   return useMutation({
-    mutationFn: async (input: { id: string; direction: 'up' | 'down' }) =>
-      unwrap(await moveSegment(input.id, input.direction)),
-    // Reordering is the one edit worth doing optimistically: a list that
-    // lags a click behind reads as a click that did not register.
-    onMutate: async ({ id, direction }) => {
+    mutationFn: async (ids: string[]) => unwrap(await reorderSegments(episodeId, ids)),
+    // Optimistic: a card that jumps back after the drop reads as a drop that did not register.
+    onMutate: async (ids) => {
       await queryClient.cancelQueries({ queryKey: ['episode', episodeId] });
       const previous = queryClient.getQueryData<EpisodeDetail>(['episode', episodeId]);
       if (previous) {
-        const segments = [...previous.segments];
-        const index = segments.findIndex((s) => s.id === id);
-        const target = direction === 'up' ? index - 1 : index + 1;
-        if (index >= 0 && target >= 0 && target < segments.length) {
-          [segments[index], segments[target]] = [segments[target], segments[index]];
+        const byId = new Map(previous.segments.map((s) => [s.id, s]));
+        const segments = ids.map((id) => byId.get(id)).filter((s): s is EpisodeSegment => !!s);
+        if (segments.length === previous.segments.length) {
           queryClient.setQueryData(['episode', episodeId], { ...previous, segments });
         }
       }
       return { previous };
     },
-    onError: (error: Error, _input, context) => {
+    onError: (error: Error, _ids, context) => {
       if (context?.previous) queryClient.setQueryData(['episode', episodeId], context.previous);
-      toast.error(`فشل تحريك المقطع: ${error.message}`);
+      toast.error(`فشل ترتيب المقاطع: ${error.message}`);
     },
     onSettled: invalidate,
   });
@@ -155,6 +181,30 @@ export function useDeleteSegment(episodeId: string) {
     mutationFn: async (id: string) => unwrap(await deleteSegment(id)),
     onSuccess: invalidate,
     onError: (error: Error) => toast.error(`فشل مسح المقطع: ${error.message}`),
+  });
+}
+
+/** Delete several segments of the episode (the grid's selection). */
+export function useDeleteSegments(episodeId: string) {
+  const invalidate = useInvalidateEpisode(episodeId);
+  return useMutation({
+    mutationFn: async (ids: string[]) => unwrap(await deleteSegments(episodeId, ids)),
+    onSuccess: ({ deleted }) => {
+      invalidate();
+      toast.success(`اتمسح ${deleted} مقطع`);
+    },
+    onError: (error: Error) => toast.error(`فشل المسح: ${error.message}`),
+  });
+}
+
+/** One voice for the grid's selection — see `setVoiceForSegments`. */
+export function useSetVoiceForSegments(episodeId: string) {
+  const invalidate = useInvalidateEpisode(episodeId);
+  return useMutation({
+    mutationFn: async ({ ids, voiceProfileId }: { ids: string[]; voiceProfileId: string | null }) =>
+      unwrap(await setVoiceForSegments(episodeId, ids, voiceProfileId)),
+    onSuccess: invalidate,
+    onError: (error: Error) => toast.error(`فشل تغيير الصوت: ${error.message}`),
   });
 }
 
@@ -192,8 +242,15 @@ export function useRenderQueue(episodeId: string) {
     };
   }, []);
 
+  /**
+   * `overrides.voiceProfileId` re-voices every segment it renders (`null`: the
+   * model's own voice); `modelId` + `params` render with those model settings.
+   */
   const start = useCallback(
-    async (ids: string[]) => {
+    async (
+      ids: string[],
+      overrides: { voiceProfileId?: string | null; modelId?: string; params?: Record<string, number> } = {},
+    ) => {
       if (running.current || ids.length === 0) return;
       running.current = true;
       stopRequested.current = false;
@@ -205,7 +262,7 @@ export function useRenderQueue(episodeId: string) {
         if (stopRequested.current) break;
         setState({ total: ids.length, done, failed, currentId: id });
         try {
-          const result = await renderSegment(id);
+          const result = await renderSegment(id, overrides);
           if (!result.success) failed += 1;
         } catch {
           failed += 1;

@@ -6,5 +6,5 @@
  */
 export function isWorkspaceRoute(pathname: string | null) {
   if (!pathname) return false;
-  return pathname === '/';
+  return pathname === '/' || /^\/projects\/[^/]+\/episodes\/[^/]+\/?$/.test(pathname);
 }
