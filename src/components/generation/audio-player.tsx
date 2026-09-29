@@ -17,11 +17,13 @@ interface AudioPlayerProps {
    * its card.
    */
   compact?: boolean;
+  /** Start playing as soon as it loads (a take that was just generated). Ignored if the browser blocks it. */
+  autoPlay?: boolean;
 }
 
 const PLAYBACK_RATES = [1, 1.25, 1.5, 2];
 
-export function AudioPlayer({ src, isLoading, compact = false }: AudioPlayerProps) {
+export function AudioPlayer({ src, isLoading, compact = false, autoPlay = false }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -47,11 +49,20 @@ export function AudioPlayer({ src, isLoading, compact = false }: AudioPlayerProp
     audio.addEventListener('timeupdate', setAudioTime);
     audio.addEventListener('ended', setAudioEnd);
 
+    if (autoPlay) {
+      audio
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => {});
+    }
+
     return () => {
       audio.removeEventListener('loadeddata', setAudioData);
       audio.removeEventListener('timeupdate', setAudioTime);
       audio.removeEventListener('ended', setAudioEnd);
     };
+    // autoPlay applies to the file it was mounted with, not to later toggles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   useEffect(() => {

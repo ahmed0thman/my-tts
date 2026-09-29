@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { OnboardingTour } from '@/components/tour/onboarding-tour';
 import { cn } from '@/lib/utils';
+import { isWorkspaceRoute } from '@/lib/layout';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -12,6 +14,7 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const workspace = isWorkspaceRoute(usePathname());
 
   return (
     // 100dvh rather than h-screen: h-screen jumps when mobile browser chrome
@@ -40,9 +43,15 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* The single place page width is decided. Without this every page
             stretched edge-to-edge, stranding headings and actions at opposite
-            ends of a 1400px row. */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="page-shell px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            ends of a 1400px row. A workspace fills the window on large
+            screens and scrolls inside its own panes instead. */}
+        <main className={cn('flex-1 overflow-x-hidden overflow-y-auto', workspace && 'lg:overflow-y-hidden')}>
+          <div
+            className={cn(
+              'px-4 py-6 sm:px-6 lg:px-8',
+              workspace ? 'workspace-shell lg:h-full lg:py-6' : 'page-shell lg:py-8',
+            )}
+          >
             {children}
           </div>
         </main>

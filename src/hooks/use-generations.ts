@@ -11,7 +11,13 @@ import {
   getGenerationStats
 } from '@/actions/generation';
 
-export function useGenerations(params?: { page?: number; pageSize?: number; voiceProfileId?: string; status?: string }) {
+export function useGenerations(params?: {
+  page?: number;
+  pageSize?: number;
+  voiceProfileId?: string;
+  status?: string;
+  studioOnly?: boolean;
+}) {
   return useQuery({
     queryKey: ['generations', params],
     queryFn: async () => {
@@ -77,13 +83,13 @@ export function useDeleteGeneration() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['generations'] });
       queryClient.invalidateQueries({ queryKey: ['generation-stats'] });
-      toast.success('Generation deleted');
+      toast.success('اتمسح');
     },
     onError: (error: Error, _, context) => {
       if (context?.previousGenerations) {
         queryClient.setQueryData(['generations'], context.previousGenerations);
       }
-      toast.error(`Failed to delete generation: ${error.message}`);
+      toast.error(`فشل المسح: ${error.message}`);
     },
   });
 }
@@ -100,10 +106,10 @@ export function useRetryGeneration() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['generations'] });
       queryClient.invalidateQueries({ queryKey: ['generation-stats'] });
-      toast.success('Generation retried successfully');
+      toast.success('اتولّد تاني');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to retry generation: ${error.message}`);
+      toast.error(`فشلت إعادة التوليد: ${error.message}`);
     },
   });
 }

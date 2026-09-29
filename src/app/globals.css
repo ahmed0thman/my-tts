@@ -223,6 +223,14 @@
     margin-inline: auto;
   }
 
+  /* Two-pane workspaces (studio, episode): the clip grid grows to three
+     columns, so they take the full width. See src/lib/layout.ts. */
+  .workspace-shell {
+    width: 100%;
+    max-width: 2000px;
+    margin-inline: auto;
+  }
+
   /* Hairline grain over the app background: gives the dark surfaces
      depth without a single extra DOM repaint on scroll. */
   .studio-grain::before {

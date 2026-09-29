@@ -5,7 +5,8 @@ import { Menu, Moon, Sun, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { TOUR_EVENT } from '@/lib/utils';
+import { cn, TOUR_EVENT } from '@/lib/utils';
+import { isWorkspaceRoute } from '@/lib/layout';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -13,6 +14,7 @@ interface HeaderProps {
 
 const TITLES: Record<string, string> = {
   '/': 'إنشاء صوت جديد',
+  '/library': 'مكتبة المقاطع',
   '/voices': 'الأصوات',
   '/history': 'السجل',
   '/presets': 'الإعدادات المسبقة',
@@ -34,7 +36,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full shrink-0 items-center border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="page-shell flex w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+      <div className={cn(isWorkspaceRoute(pathname) ? 'workspace-shell' : 'page-shell', 'flex w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8')}>
         <div className="flex min-w-0 items-center gap-2">
           <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={onMenuClick}>
             <Menu className="h-5 w-5" />

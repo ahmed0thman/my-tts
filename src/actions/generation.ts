@@ -68,13 +68,19 @@ export async function createGeneration(input: FormData | CreateGenerationInput):
   }
 }
 
-export async function getGenerations(params: { page?: number; pageSize?: number; voiceProfileId?: string; status?: string } = {}) {
+export async function getGenerations(
+  params: { page?: number; pageSize?: number; voiceProfileId?: string; status?: string; studioOnly?: boolean } = {},
+) {
   try {
-    const { page = 1, pageSize = 10, voiceProfileId, status } = params;
+    const { page = 1, pageSize = 10, voiceProfileId, status, studioOnly } = params;
 
     // The generation log: what a model rendered. Uploads and recordings added
     // to episodes live in their episode and the clip library.
     const where: any = { source: 'tts' };
+    // Episode segments live in their episode.
+    if (studioOnly) {
+      where.episodeId = null;
+    }
     if (voiceProfileId) where.voiceProfileId = voiceProfileId;
     if (status) where.status = status;
 

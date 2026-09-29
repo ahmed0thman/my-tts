@@ -1,23 +1,20 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { generateSchema } from '@/lib/validations';
 import { z } from 'zod';
 import { Form } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TextInput } from './text-input';
 import { VoiceControls } from './voice-controls';
-import { AudioPlayer } from './audio-player';
-import { MasterAudioDock } from './master-audio-dock';
-import { Loader2, Sparkles, Command, Zap, CheckCircle2, Activity, FolderCheck } from 'lucide-react';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { VolumeHighIcon, FlashIcon } from '@hugeicons/core-free-icons';
-import { useCreateGeneration } from '@/hooks/use-generations';
+import { ClipCard, PendingClipCard } from './clip-card';
+import { ClipGrid, PaneHeading, WorkspaceSplit } from '@/components/layout/workspace-split';
+import { Headphones } from 'lucide-react';
+import { useCreateGeneration, useDeleteGeneration, useGenerations, useRetryGeneration } from '@/hooks/use-generations';
+import { useConfirm } from '@/providers/confirm-provider';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { DEFAULT_MODEL_ID } from '@/lib/models';
@@ -26,19 +23,35 @@ type GenerateFormValues = z.infer<typeof generateSchema>;
 
 interface GenerationFormProps {
   mode?: 'single' | 'batch';
+  /** The page's title block, placed above both panes. */
+  header?: ReactNode;
 }
 
-export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
+/**
+ * The studio: text and voice settings on the right, every take as a card in
+ * a grid on the left (WorkspaceSplit). The newest take is marked and plays
+ * on its own.
+ */
+const PAGE = 24;
+
+export function GenerationForm({ mode = 'single', header }: GenerationFormProps) {
   const [isBatchMode, setIsBatchMode] = useState(mode === 'batch');
-  const [latestAudioPath, setLatestAudioPath] = useState<string | null>(null);
-  const [latestText, setLatestText] = useState<string>('');
-  const [latestSavedPath, setLatestSavedPath] = useState<string | null>(null);
+  // The take generated last in this visit: marked, scrolled to and played.
+  const [latestId, setLatestId] = useState<string | null>(null);
+  // What is rendering right now, shown as a card until its row exists.
+  const [pending, setPending] = useState<{ text: string; label?: string } | null>(null);
+  const [limit, setLimit] = useState(PAGE);
 
   useEffect(() => {
     setIsBatchMode(mode === 'batch');
   }, [mode]);
 
   const { mutateAsync: createGen, isPending } = useCreateGeneration();
+  const { data: clips, isLoading: clipsLoading } = useGenerations({ page: 1, pageSize: limit, studioOnly: true });
+  const { mutate: deleteGen } = useDeleteGeneration();
+  const { mutate: retryGen, isPending: isRetrying } = useRetryGeneration();
+  const confirm = useConfirm();
+  const isGenerating = isPending || isRetrying;
 
   const form = useForm<GenerateFormValues>({
     resolver: zodResolver(generateSchema) as any,
@@ -64,6 +77,15 @@ export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
   }, [form]);
 
   const onSubmit = async (data: GenerateFormValues) => {
+    const request = (text: string) =>
+      createGen({
+        text,
+        voiceProfileId: data.voiceProfileId === 'default' ? undefined : data.voiceProfileId,
+        modelId: data.modelId,
+        params: data.params,
+        outputDir: data.outputDir || undefined,
+      });
+
     try {
       if (isBatchMode) {
         const lines = data.text.split('\n').map((l: string) => l.trim()).filter(Boolean);
@@ -72,123 +94,131 @@ export function GenerationForm({ mode = 'single' }: GenerationFormProps) {
           return;
         }
 
-        toast.info(`جاري بدء توليد ${lines.length} أسطر تباعاً...`);
         for (let i = 0; i < lines.length; i++) {
-          const res = await createGen({
-            text: lines[i],
-            voiceProfileId: data.voiceProfileId === 'default' ? undefined : data.voiceProfileId,
-            modelId: data.modelId,
-            params: data.params,
-            outputDir: data.outputDir || undefined,
-          });
-          if (res?.audioPath) {
-            setLatestAudioPath(`/api/audio/${res.audioPath}`);
-            setLatestText(lines[i]);
-            setLatestSavedPath(res.savedPath ?? null);
-          }
+          setPending({ text: lines[i], label: `بيتولّد ${i + 1} من ${lines.length}` });
+          const res = await request(lines[i]);
+          if (res?.id) setLatestId(res.id);
         }
         toast.success(`اكتمل توليد ${lines.length} ملفات صوتية`, {
           description: data.outputDir || undefined,
         });
       } else {
-        const res = await createGen({
-          text: data.text,
-          voiceProfileId: data.voiceProfileId === 'default' ? undefined : data.voiceProfileId,
-          modelId: data.modelId,
-          params: data.params,
-          outputDir: data.outputDir || undefined,
-        });
-
-        if (res?.audioPath) {
-          setLatestAudioPath(`/api/audio/${res.audioPath}`);
-          setLatestText(data.text);
-          setLatestSavedPath(res.savedPath ?? null);
+        setPending({ text: data.text });
+        const res = await request(data.text);
+        if (res?.id) {
+          setLatestId(res.id);
           toast.success('تم إنشاء الصوت بنجاح!', {
             description: res.savedPath ?? undefined,
           });
         }
       }
     } catch (error) {
-      toast.error('حدث خطأ أثناء إنشاء الصوت');
+      // useCreateGeneration already showed the reason.
       console.error(error);
+    } finally {
+      setPending(null);
     }
   };
 
-  return (
-    <div className="space-y-8 w-full max-w-5xl mx-auto">
-      {/* Batch mode here is fire-and-forget: the clips land in the history,
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'تمسح التسجيل ده؟', confirmLabel: 'امسح', destructive: true })) {
+      deleteGen(id);
+    }
+  };
+
+  const reuseText = (text: string) => {
+    form.setValue('text', text, { shouldDirty: true, shouldValidate: true });
+    document.querySelector<HTMLTextAreaElement>('#tour-text-input textarea')?.focus();
+  };
+
+  const items: any[] = clips?.items ?? [];
+  const total = clips?.total ?? 0;
+
+  const controls = (
+    <>
+      {/* Batch mode here is fire-and-forget: the clips land in the grid,
           unordered and unmerged. A long piece belongs in a project. */}
       {isBatchMode && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm">
-          <span>
-            بتعمل حلقة أو فيديو طويل؟ المشاريع بتحفظ ترتيب المقاطع، وتخليك تراجع وتعيد كل مقطع لوحده، وبتدمجهم في ملف واحد.
-          </span>
+        <div className="space-y-2 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm">
+          <p>
+            بتعمل حلقة أو فيديو طويل؟ المشاريع بتحفظ ترتيب المقاطع، وتخليك تراجع وتعيد كل مقطع لوحده، وبتدمجهم في ملف
+            واحد.
+          </p>
           <Button asChild size="sm" variant="outline">
             <Link href="/projects">افتح المشاريع</Link>
           </Button>
         </div>
       )}
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+        <TextInput isPending={isPending} isBatchMode={isBatchMode} />
+        <VoiceControls />
+      </form>
+    </>
+  );
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Main Grid: Left Editor (7) + Right Modulation (5) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <div className="lg:col-span-7">
-              <TextInput isPending={isPending} isBatchMode={isBatchMode} />
-            </div>
-            <div className="lg:col-span-5">
-              <VoiceControls />
-            </div>
-          </div>
-        </form>
-      </Form>
+  const toolbar = (
+    <PaneHeading
+      title="التسجيلات"
+      meta={
+        total > 0 && (
+          <>
+            <span className="numeric font-semibold text-foreground">{total}</span> تسجيل
+          </>
+        )
+      }
+      actions={
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/history">السجل كله</Link>
+        </Button>
+      }
+    />
+  );
 
-      {/* Embedded Audio Studio Card */}
-      <div className="pt-6 border-t border-border/50">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-primary" />
-            <h3 className="text-base font-bold tracking-tight">استوديو الاستماع الصوتي</h3>
-          </div>
-          {latestAudioPath && (
-            <Badge variant="outline" className="text-xs text-primary border-primary/30">
-              جاهز للاستماع والتحميل
-            </Badge>
-          )}
-        </div>
-
-        <AudioPlayer src={latestAudioPath} isLoading={isPending && !isBatchMode} />
-
-        {latestSavedPath && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
-            <FolderCheck className="h-3.5 w-3.5 shrink-0 text-success" />
-            <span className="text-[11px] font-semibold shrink-0">اتحفظ في:</span>
-            <span
-              dir="ltr"
-              className="flex-1 truncate text-left font-mono text-[11px] text-muted-foreground"
-              title={latestSavedPath}
-            >
-              {latestSavedPath}
+  return (
+    <Form {...form}>
+      <WorkspaceSplit header={header} controls={controls} toolbar={toolbar}>
+        {clipsLoading ? (
+          <ClipGrid>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-56 rounded-2xl" />
+            ))}
+          </ClipGrid>
+        ) : items.length === 0 && !pending ? (
+          <div className="flex min-h-60 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border-strong px-6 py-10 text-center">
+            <span className="grid h-11 w-11 place-items-center rounded-full bg-primary/10 text-primary">
+              <Headphones className="h-5 w-5" />
             </span>
+            <p className="text-sm font-bold">لسه مفيش تسجيلات</p>
+            <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+              اكتب النص على اليمين واضغط «توليد الصوت» — كل تسجيل هيظهر هنا كارت تسمعه وتحمّله وتعدّله.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <ClipGrid>
+              {pending && <PendingClipCard text={pending.text} label={pending.label} />}
+              {items.map((generation) => (
+                <ClipCard
+                  key={generation.id}
+                  generation={generation}
+                  isNew={generation.id === latestId}
+                  isGenerating={isGenerating}
+                  onReuse={reuseText}
+                  onRetry={() => retryGen(generation.id, { onSuccess: (res: any) => res?.id && setLatestId(res.id) })}
+                  onDelete={() => void handleDelete(generation.id)}
+                />
+              ))}
+            </ClipGrid>
+            {items.length < total && (
+              <div className="flex justify-center">
+                <Button variant="outline" size="sm" onClick={() => setLimit((n) => n + PAGE)}>
+                  اعرض أقدم
+                </Button>
+              </div>
+            )}
           </div>
         )}
-      </div>
-
-      {/* Floating Master Studio Deck.
-          The dock is fixed, so it needs a matching spacer or it sits on top of
-          the generate button — which it did on narrow viewports, where the dock
-          is tallest. Reserved only while the dock is actually mounted. */}
-      {latestAudioPath && (
-        <div aria-hidden style={{ height: '11rem' }} className="shrink-0" />
-      )}
-
-      {latestAudioPath && (
-        <MasterAudioDock
-          src={latestAudioPath}
-          text={latestText}
-          onClose={() => setLatestAudioPath(null)}
-        />
-      )}
-    </div>
+      </WorkspaceSplit>
+    </Form>
   );
 }
