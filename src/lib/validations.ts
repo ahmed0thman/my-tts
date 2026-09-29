@@ -79,3 +79,10 @@ export const clipNameSchema = z
   .trim()
   .min(1, 'الاسم مطلوب')
   .max(120, 'الاسم يجب ألا يتجاوز 120 حرف');
+
+export const dubTitleSchema = z.string().trim().min(1, 'الاسم مطلوب').max(120, 'الاسم يجب ألا يتجاوز 120 حرف');
+
+export const dubAssembleSchema = z.object({
+  background: z.coerce.number().min(0).max(1),
+  outputDir: z.string().optional(),
+});

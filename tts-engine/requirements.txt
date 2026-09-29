@@ -66,6 +66,8 @@ numpy<=1.26.4
 omegaconf
 pydub
 soundfile
+# ffmpeg for dubbing (video audio in, new track muxed out) — see requirements-desktop.txt.
+imageio-ffmpeg
 torchdiffeq
 tqdm>=4.65.0
 vocos

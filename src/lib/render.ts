@@ -99,7 +99,16 @@ export interface RenderResult {
 
 export async function renderGeneration(
   id: string,
-  options: { outputDir?: string; overrides?: RenderOverrides } = {},
+  options: {
+    outputDir?: string;
+    overrides?: RenderOverrides;
+    /**
+     * Sent to the engine with this render only, never stored on the row —
+     * a dub line's slot (`targetDuration`, `maxDuration`), which is a fact
+     * about the video rather than a setting the user chose.
+     */
+    engineParams?: Record<string, number>;
+  } = {},
 ): Promise<RenderResult> {
   const row = await prisma.generation.findUnique({ where: { id } });
   if (!row) return { success: false, error: 'المقطع مش موجود' };
@@ -138,7 +147,7 @@ export async function renderGeneration(
       modelId: settings.modelId,
       voiceProfilePath: reference.referenceAudioPath,
       referenceText: reference.referenceText,
-      params: settings.params,
+      params: { ...settings.params, ...options.engineParams },
       outputDir: options.outputDir,
     });
 

@@ -77,9 +77,10 @@ export async function getGenerations(
     // The generation log: what a model rendered. Uploads and recordings added
     // to episodes live in their episode and the clip library.
     const where: any = { source: 'tts' };
-    // Episode segments live in their episode.
+    // Episode segments and dub lines live on their own pages.
     if (studioOnly) {
       where.episodeId = null;
+      where.dubId = null;
     }
     if (voiceProfileId) where.voiceProfileId = voiceProfileId;
     if (status) where.status = status;

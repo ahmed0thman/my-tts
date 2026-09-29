@@ -62,6 +62,17 @@ function toWebStream(nodeStream: fs.ReadStream): ReadableStream<Uint8Array> {
   });
 }
 
+/** Everything here is WAV except dub videos and their poster frames. */
+const CONTENT_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
+  '.avi': 'video/x-msvideo',
+  '.jpg': 'image/jpeg',
+};
+
 /** Parses a single `bytes=start-end` range against a known file size. */
 function parseRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
@@ -116,6 +127,7 @@ export async function GET(
     }
 
     const size = fs.statSync(absolutePath).size;
+    const contentType = CONTENT_TYPES[path.extname(absolutePath).toLowerCase()] ?? 'audio/wav';
     const rangeHeader = request.headers.get('range');
 
     // Honour Range requests so scrubbing works and the browser stops
@@ -135,7 +147,7 @@ export async function GET(
       return new NextResponse(toWebStream(stream), {
         status: 206,
         headers: {
-          'Content-Type': 'audio/wav',
+          'Content-Type': contentType,
           'Content-Length': String(range.end - range.start + 1),
           'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
           'Accept-Ranges': 'bytes',
@@ -146,7 +158,7 @@ export async function GET(
 
     return new NextResponse(toWebStream(fs.createReadStream(absolutePath)), {
       headers: {
-        'Content-Type': 'audio/wav',
+        'Content-Type': contentType,
         'Content-Length': String(size),
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'public, max-age=31536000',

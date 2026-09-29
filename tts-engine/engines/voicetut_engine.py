@@ -71,6 +71,32 @@ GAP_SENTENCE = 0.12
 GAP_PARAGRAPH = 0.38
 GAP_BEAT = 0.95
 
+#: Codec frames per second — the unit OmniVoice's duration estimate is in.
+FRAME_RATE = 25
+#: How far a take may be pushed off its natural pace to fit a dubbing slot:
+#: up to 1.25x faster or 0.87x slower keeps it sounding like the same speaker;
+#: past that a line would sound rushed or drawled. `maxDuration` (the room
+#: before the next line) may push it up to FORCE_FASTEST — and no further:
+#: squeezed to 1.6x, the model **drops words** ("An AI you send words to,
+#: that understands…" came back as "An AI understands…"). Past 1.3x the take
+#: is left long and the dubbing assembly speeds it up with atempo, which
+#: keeps every word.
+FIT_FASTEST = 1.25
+FIT_SLOWEST = 1.15
+FORCE_FASTEST = 1.3
+
+_ARABIC = re.compile(r"[\u0600-\u06FF]")
+
+
+def _language_for(chunk: str) -> Optional[str]:
+    """English for a line with no Arabic letters in it; the model's Egyptian otherwise.
+
+    VoiceTut defaults to Egyptian (`arz`), which reads code-switched English
+    words fine but gives an all-English line an Egyptian lilt — a dub into
+    English is exactly that.
+    """
+    return None if _ARABIC.search(chunk) else "en"
+
 
 def _install_codec_shim() -> None:
     """Make our vendored codec answer `from transformers import ...`.
@@ -262,13 +288,29 @@ class VoiceTutEngine(TTSEngine):
         progress.tracker.start_generating(self.id, chunks=len(chunks))
         logger.info(f"Generating {len(text)} chars in {len(chunks)} chunk(s)")
 
+        # Dubbing: fit the take to the seconds the original line took.
+        durations = self._fit_durations(
+            chunks,
+            params.get("targetDuration"),
+            params.get("maxDuration"),
+            overrides["speed"],
+            reference_audio if "ref_audio" in kwargs else None,
+            kwargs.get("ref_text"),
+        )
+
         import numpy as np
 
         pieces: List[Any] = []
         for index, (chunk, gap_seconds) in enumerate(chunks):
             progress.tracker.set_chunk(index, chunk)
             logger.info(f"  {index + 1}/{len(chunks)} (+{gap_seconds:.2f}s): {chunk[:60]}")
-            wav = self.tts.synthesize(chunk, output=None, **kwargs, **overrides)
+            wav = self.tts.synthesize(
+                chunk,
+                output=None,
+                language=_language_for(chunk),
+                **kwargs,
+                **{**overrides, "duration": durations[index] if durations else None},
+            )
             piece = np.asarray(wav, dtype=np.float32).squeeze()
             progress.tracker.add_frames(int(piece.shape[-1] / SAMPLE_RATE * 25))
             pieces.append(piece)
@@ -285,6 +327,62 @@ class VoiceTutEngine(TTSEngine):
             logger.info(f"  breaths: {breath_seconds:.2f}s turned down {breath_reduction:.0f} dB")
         logger.info(f"  -> {tensor.shape[-1] / SAMPLE_RATE:.1f}s of audio")
         return tensor, SAMPLE_RATE, None
+
+    def _fit_durations(
+        self,
+        chunks: List[Tuple[str, float]],
+        target: Any,
+        room: Any,
+        speed: float,
+        reference_audio: Optional[str],
+        reference_text: Optional[str],
+    ) -> Optional[List[float]]:
+        """Seconds of speech per chunk so the take lasts about `target` (a dubbing slot).
+
+        OmniVoice can render to an exact length, but forcing a line far off
+        its natural pace sounds wrong, so the target is taken only within
+        FIT_FASTEST / FIT_SLOWEST of the model's own estimate. `room` — the
+        time before the next line starts — is a hard ceiling up to
+        FORCE_FASTEST; past that the take is left longer and the dubbing
+        assembly speeds it up or trims it, and the page says the line is too
+        long for its place.
+        """
+        try:
+            target = float(target) if target is not None else 0.0
+            room = float(room) if room is not None else 0.0
+        except (TypeError, ValueError):
+            return None
+        if target <= 0:
+            return None
+
+        estimator = getattr(getattr(self.tts, "model", None), "duration_estimator", None)
+        if estimator is None:
+            return None
+        if reference_audio and reference_text:
+            import torchaudio
+
+            info = torchaudio.info(reference_audio)
+            ref_tokens = max(1, int(info.num_frames / info.sample_rate * FRAME_RATE))
+        else:
+            reference_text, ref_tokens = "Nice to meet you.", 25
+
+        natural = []
+        for chunk, _gap in chunks:
+            spoken = self.tts.normalizer.normalize(chunk) if _ARABIC.search(chunk) else chunk
+            tokens = estimator.estimate_duration(spoken, reference_text, ref_tokens)
+            natural.append(max(0.3, tokens / FRAME_RATE / max(speed, 0.1)))
+        gaps = sum(gap for _chunk, gap in chunks)
+        total_natural = sum(natural)
+
+        speech = max(0.3, target - gaps)
+        speech = min(max(speech, total_natural / FIT_FASTEST), total_natural * FIT_SLOWEST)
+        if room > 0:
+            speech = max(min(speech, room - gaps), total_natural / FORCE_FASTEST)
+        scale = speech / total_natural
+        logger.info(
+            f"  fit: slot {target:.2f}s, natural {total_natural + gaps:.2f}s -> {speech + gaps:.2f}s (x{1 / scale:.2f} pace)"
+        )
+        return [n * scale for n in natural]
 
     @staticmethod
     def _check_reference_length(path: str) -> None:

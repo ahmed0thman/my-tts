@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Music, Mic, History, Settings2, Settings, X, FolderKanban, Library } from 'lucide-react';
+import { Music, Mic, History, Settings2, Settings, X, FolderKanban, Library, Clapperboard } from 'lucide-react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { AiVoice01Icon } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ interface SidebarProps {
 const LINKS = [
   { href: '/', label: 'إنشاء صوت', icon: Music },
   { href: '/projects', label: 'المشاريع', icon: FolderKanban },
+  { href: '/dubbing', label: 'الدبلجة', icon: Clapperboard },
   { href: '/library', label: 'مكتبة المقاطع', icon: Library },
   { href: '/voices', label: 'الأصوات', icon: Mic },
   { href: '/history', label: 'السجل', icon: History },

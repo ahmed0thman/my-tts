@@ -17,13 +17,14 @@ if [ -f "$DEST/sawtak.db" ]; then
   exit 1
 fi
 
-mkdir -p "$DEST/storage/audio" "$DEST/storage/voice-samples" "$DEST/storage/clips"
+mkdir -p "$DEST/storage/audio" "$DEST/storage/voice-samples" "$DEST/storage/clips" "$DEST/storage/videos"
 
 # .backup rather than cp: a consistent copy even if something has it open.
 sqlite3 "$REPO/prisma/namaa.db" ".backup '$DEST/sawtak.db'"
 cp -p "$REPO"/storage/voice-samples/*.wav "$DEST/storage/voice-samples/" 2>/dev/null || true
 cp -p "$REPO"/storage/audio/*.wav "$DEST/storage/audio/" 2>/dev/null || true
 cp -p "$REPO"/storage/clips/*.wav "$DEST/storage/clips/" 2>/dev/null || true
+cp -p "$REPO"/storage/videos/* "$DEST/storage/videos/" 2>/dev/null || true
 
 # Voice profiles store absolute paths to their reference clips. Generated clips
 # store /storage/audio/… paths, which resolve against the data root already.

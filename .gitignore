@@ -39,6 +39,7 @@ storage/audio/*
 storage/voice-samples/*
 !storage/voice-samples/.gitkeep
 storage/clips/*
+storage/videos/*
 
 # Media files
 # Audio

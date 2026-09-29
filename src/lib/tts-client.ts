@@ -448,3 +448,78 @@ export async function importAudio(params: {
   }
   return (await response.json()) as ImportAudioResult;
 }
+
+export interface VideoProbe {
+  duration: number;
+  has_video: boolean;
+  has_audio: boolean;
+  width: number | null;
+  height: number | null;
+  /** A frame from the video, `/storage/videos/*.jpg`. */
+  poster_path: string | null;
+}
+
+/** Duration and streams of a video in storage/videos, and a poster frame for it. */
+export async function probeVideo(storedPath: string): Promise<VideoProbe> {
+  const formData = new UndiciFormData();
+  formData.append('path', storedPath);
+  const response = await engineFetch('/api/dub/probe', { method: 'POST', body: formData, long: true });
+  if (!response.ok) throw await engineError(response, 'Failed to read the video');
+  return (await response.json()) as VideoProbe;
+}
+
+export interface TranscriptLine {
+  /** Seconds into the video. */
+  start: number;
+  end: number;
+  text: string;
+}
+
+/**
+ * The video's speech as timed lines (Whisper large-v3-turbo on the engine).
+ * `language` forces the spoken language; left out, Whisper detects it.
+ */
+export async function transcribeVideo(
+  storedPath: string,
+  language?: string,
+): Promise<{ language: string; duration: number; lines: TranscriptLine[] }> {
+  const formData = new UndiciFormData();
+  formData.append('path', storedPath);
+  if (language) formData.append('language', language);
+  // Runs about half real time, and waits behind any generation for the model lock.
+  const response = await engineFetch('/api/dub/transcribe', { method: 'POST', body: formData, long: true });
+  if (!response.ok) throw await engineError(response, 'Failed to transcribe the video');
+  return (await response.json()) as { language: string; duration: number; lines: TranscriptLine[] };
+}
+
+export interface AssembleDubResult {
+  duration: number;
+  /** Per take, in start order: how much it was sped up to fit, and seconds cut off the end. */
+  clips: { start: number; speed: number; trimmed: number }[];
+  sped_up: number;
+  trimmed: number;
+  audio_path: string;
+  video_path: string;
+  /** The exported copy (the chosen folder), or the stored video itself. */
+  saved_path: string;
+  file_size: number;
+}
+
+/** Lay the takes on the video's timeline and replace its audio with them. */
+export async function assembleDub(params: {
+  videoPath: string;
+  clips: { path: string; start: number }[];
+  background: number;
+  outputDir?: string;
+  filenameHint?: string;
+}): Promise<AssembleDubResult> {
+  const formData = new UndiciFormData();
+  formData.append('video_path', params.videoPath);
+  formData.append('clips', JSON.stringify(params.clips));
+  formData.append('background', String(params.background));
+  if (params.outputDir) formData.append('output_dir', params.outputDir);
+  if (params.filenameHint) formData.append('filename_hint', params.filenameHint);
+  const response = await engineFetch('/api/dub/assemble', { method: 'POST', body: formData, long: true });
+  if (!response.ok) throw await engineError(response, 'Failed to build the dubbed video');
+  return (await response.json()) as AssembleDubResult;
+}

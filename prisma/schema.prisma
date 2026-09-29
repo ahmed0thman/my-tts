@@ -64,11 +64,22 @@ model Generation {
   // a saved Clip). Only `tts` rows can be rendered again; the rest keep their
   // audio until edited in the editor or deleted, and `text` is their label.
   source          String           @default("tts")
+  // Set when the row is a line of a dub: the video's speech, one line per
+  // row. `startMs`/`endMs` are where the original line was spoken — the take
+  // is fitted to that slot and placed at `startMs`. `sourceText` is what
+  // Whisper heard; `text` is what gets spoken (the same, or the user's
+  // translation). `position` is the line's order in the video.
+  dubId           String?
+  dub             Dub?             @relation(fields: [dubId], references: [id], onDelete: Cascade)
+  startMs         Int?
+  endMs           Int?
+  sourceText      String?
 
   @@index([createdAt(sort: Desc)])
   @@index([voiceProfileId])
   @@index([status])
   @@index([episodeId, position])
+  @@index([dubId, position])
 }
 
 /// A container for related audio — a channel, a series, a client. Holds any
@@ -118,6 +129,41 @@ model Episode {
   segments        Generation[]
 
   @@index([projectId, createdAt])
+}
+
+/// A video to put a new voice on. Its speech is transcribed into timed lines
+/// (Generation rows with `dubId`), each line is rendered to fit its slot, and
+/// the takes are laid on the video's timeline and replace its audio.
+model Dub {
+  id              String       @id @default(cuid())
+  title           String
+  videoPath       String       // `/storage/videos/src_*.<ext>` — a copy, so the user's file can move
+  videoName       String       // the file name it was uploaded as
+  posterPath      String?      // a frame from the video, for the list
+  duration        Float
+  width           Int?
+  height          Int?
+  hasAudio        Boolean      @default(true)
+  language        String?      // what Whisper detected (`ar`, `en`, …); null until transcribed
+  transcribedAt   DateTime?
+  // The voice the lines render with, like an episode's.
+  modelId         String?
+  voiceProfileId  String?
+  params          Json?
+  outputDir       String?      // where the dubbed video is exported
+  background      Float        @default(0)  // original soundtrack kept under the new voice, 0–1
+  // The latest dubbed video. `outputSignature` is the lines and takes it was
+  // built from (mergeSignature); when they no longer match, it is out of date.
+  outputVideoPath String?
+  outputAudioPath String?
+  outputSavedPath String?
+  outputAt        DateTime?
+  outputSignature String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  lines           Generation[]
+
+  @@index([updatedAt(sort: Desc)])
 }
 
 /// A saved piece of audio to reuse across episodes — an intro, a sign-off,

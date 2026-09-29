@@ -17,6 +17,7 @@ import io
 
 import json
 
+import dubbing
 import model_registry
 import progress
 from model_manager import ModelManager
@@ -56,6 +57,7 @@ DATA_ROOT = os.environ.get("SAWTAK_DATA_ROOT") or os.path.join(os.path.dirname(_
 STORAGE_DIR = os.path.abspath(os.path.join(DATA_ROOT, "storage"))
 AUDIO_DIR = os.path.join(STORAGE_DIR, "audio")
 VOICES_DIR = os.path.join(STORAGE_DIR, "voice-samples")
+VIDEOS_DIR = os.path.join(STORAGE_DIR, "videos")
 
 START_TIME = time.time()
 
@@ -73,6 +75,7 @@ ENGINE_SOCKET = os.environ.get("SAWTAK_ENGINE_SOCKET") or os.path.join(STORAGE_D
 async def startup_event():
     os.makedirs(AUDIO_DIR, exist_ok=True)
     os.makedirs(VOICES_DIR, exist_ok=True)
+    os.makedirs(VIDEOS_DIR, exist_ok=True)
     asyncio.create_task(model_manager.load_model())
 
 @app.post("/api/generate")
@@ -197,7 +200,7 @@ def _resolve_generated_clip(stored: str) -> str:
     return path
 
 
-def _export_copy(filepath: str, target_dir: str, filename_hint: Optional[str]) -> str:
+def _export_copy(filepath: str, target_dir: str, filename_hint: Optional[str], ext: str = ".wav") -> str:
     """Copy a finished file into the user's chosen folder, named after its title.
 
     The canonical copy stays in storage/audio for playback; the export never
@@ -207,10 +210,10 @@ def _export_copy(filepath: str, target_dir: str, filename_hint: Optional[str]) -
     if os.path.abspath(target_dir) == os.path.abspath(AUDIO_DIR):
         return filepath
     stem = safe_export_name(filename_hint)
-    saved_path = os.path.join(target_dir, f"{stem}.wav")
+    saved_path = os.path.join(target_dir, f"{stem}{ext}")
     suffix = 2
     while os.path.exists(saved_path):
-        saved_path = os.path.join(target_dir, f"{stem} ({suffix}).wav")
+        saved_path = os.path.join(target_dir, f"{stem} ({suffix}){ext}")
         suffix += 1
     shutil.copy2(filepath, saved_path)
     return saved_path
@@ -348,6 +351,115 @@ async def import_audio(
             os.remove(upload_path)
         except OSError:
             pass
+
+
+def _resolve_video(stored: str) -> str:
+    """A stored video path (`/storage/videos/src_x.mp4`) → the file in VIDEOS_DIR. Basename only."""
+    name = os.path.basename((stored or "").strip())
+    path = os.path.join(VIDEOS_DIR, name)
+    if not name or not os.path.isfile(path):
+        raise ValueError("ملف الفيديو مش موجود")
+    return path
+
+
+@app.post("/api/dub/probe")
+async def dub_probe(path: str = Form(...)):
+    """Duration and streams of a stored video, plus a poster frame next to it."""
+    def work():
+        video = _resolve_video(path)
+        info = dubbing.probe(video)
+        if not info["has_video"]:
+            raise ValueError("الملف ده مفيهوش صورة — اختار ملف فيديو")
+        stem = os.path.splitext(os.path.basename(video))[0]
+        frame = dubbing.poster(video, os.path.join(VIDEOS_DIR, f"{stem}.jpg"), min(1.0, info["duration"] / 3))
+        return {**info, "poster_path": f"/storage/videos/{os.path.basename(frame)}" if frame else None}
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, work)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error probing video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dub/transcribe")
+async def dub_transcribe(path: str = Form(...), language: Optional[str] = Form(None)):
+    """The video's speech as timed lines, and the language it is in.
+
+    Holds the model lock: Whisper and the TTS model share the GPU, and a
+    generation running alongside would slow both and could run memory short.
+    """
+    try:
+        video = _resolve_video(path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    async with model_manager.lock:
+        try:
+            return await asyncio.get_running_loop().run_in_executor(
+                None, lambda: dubbing.transcribe(video, model_manager.device, language or None)
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error transcribing video: {e}")
+            progress.tracker.fail(str(e))
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dub/assemble")
+async def dub_assemble(
+    video_path: str = Form(...),
+    clips: str = Form(...),
+    background: float = Form(0.0),
+    output_dir: Optional[str] = Form(None),
+    filename_hint: Optional[str] = Form(None),
+):
+    """Lay the takes on the video's timeline and replace its audio with them.
+
+    `clips` is a JSON array of `{path, start}` (a stored take, seconds into the
+    video). Writes the track (`dub_*.wav`, storage/audio) and the video
+    (`dubbed_*`, storage/videos), plus a copy of the video in the chosen folder.
+    """
+    try:
+        items = json.loads(clips)
+        if not isinstance(items, list) or not all(isinstance(c, dict) and "path" in c and "start" in c for c in items):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=400, detail="clips must be a JSON array of {path, start}")
+    try:
+        video = _resolve_video(video_path)
+        for c in items:
+            _resolve_generated_clip(c["path"])
+        target_dir = resolve_output_dir(output_dir, AUDIO_DIR)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    def work():
+        wav_name = generate_unique_filename("dub", ".wav")
+        ext = dubbing.output_extension(video)
+        video_name = generate_unique_filename("dubbed", ext)
+        wav_out = os.path.join(AUDIO_DIR, wav_name)
+        video_out = os.path.join(VIDEOS_DIR, video_name)
+        result = dubbing.assemble(
+            video, items, AUDIO_DIR, wav_out, video_out, background=max(0.0, min(1.0, background))
+        )
+        saved = _export_copy(video_out, target_dir, filename_hint, ext) if os.path.abspath(target_dir) != os.path.abspath(AUDIO_DIR) else video_out
+        return {
+            **result,
+            "audio_path": f"/storage/audio/{wav_name}",
+            "video_path": f"/storage/videos/{video_name}",
+            "saved_path": saved,
+            "file_size": os.path.getsize(video_out),
+        }
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, work)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error assembling dub: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _reference_cap() -> float:

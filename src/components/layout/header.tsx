@@ -15,6 +15,7 @@ interface HeaderProps {
 const TITLES: Record<string, string> = {
   '/': 'إنشاء صوت جديد',
   '/library': 'مكتبة المقاطع',
+  '/dubbing': 'الدبلجة',
   '/voices': 'الأصوات',
   '/history': 'السجل',
   '/presets': 'الإعدادات المسبقة',

@@ -333,6 +333,7 @@ async function prepareData(layout) {
   fs.mkdirSync(path.join(layout.dataRoot, 'storage', 'audio'), { recursive: true });
   fs.mkdirSync(path.join(layout.dataRoot, 'storage', 'voice-samples'), { recursive: true });
   fs.mkdirSync(path.join(layout.dataRoot, 'storage', 'clips'), { recursive: true });
+  fs.mkdirSync(path.join(layout.dataRoot, 'storage', 'videos'), { recursive: true });
   const isNew = !fs.existsSync(layout.dbPath);
 
   await runNodeScript(

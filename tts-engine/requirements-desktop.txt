@@ -28,3 +28,8 @@ tqdm
 packaging
 psutil
 pyyaml
+# Dubbing decodes video audio and muxes the new track with ffmpeg. The app is
+# launched from Finder without Homebrew on PATH, and a user's Mac may have no
+# ffmpeg at all, so the bundle carries imageio-ffmpeg's static binary (~40 MB,
+# GPL build). dubbing.ffmpeg_exe() prefers it.
+imageio-ffmpeg

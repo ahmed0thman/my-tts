@@ -31,7 +31,10 @@ export async function getEditTarget(kind: EditKind, id: string) {
     if (kind === 'segment') {
       const row = await prisma.generation.findUnique({
         where: { id },
-        include: { episode: { select: { id: true, title: true, projectId: true } } },
+        include: {
+          episode: { select: { id: true, title: true, projectId: true } },
+          dub: { select: { id: true, title: true } },
+        },
       });
       if (!row?.audioPath || row.status !== 'COMPLETED') {
         return { success: false as const, error: 'المقطع ده مفيهوش صوت يتعدّل' };
@@ -41,8 +44,12 @@ export async function getEditTarget(kind: EditKind, id: string) {
         id,
         audioPath: row.audioPath,
         title: row.text,
-        subtitle: row.episode ? row.episode.title : 'مقطع من الاستوديو',
-        backHref: row.episode ? `/projects/${row.episode.projectId}/episodes/${row.episode.id}` : '/history',
+        subtitle: row.episode ? row.episode.title : row.dub ? `دبلجة: ${row.dub.title}` : 'مقطع من الاستوديو',
+        backHref: row.episode
+          ? `/projects/${row.episode.projectId}/episodes/${row.episode.id}`
+          : row.dub
+            ? `/dubbing/${row.dub.id}`
+            : '/history',
         editedAt: row.editedAt,
         version: { edited: !!row.editedAt, at: row.editedAt },
       };
