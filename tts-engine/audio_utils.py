@@ -135,6 +135,39 @@ def list_directories(raw: Optional[str], show_hidden: bool = False) -> dict:
     }
 
 
+def create_directory(parent: str, name: str) -> str:
+    """Creates one new folder inside `parent`, for the folder picker's "new folder".
+
+    `name` is a single path component: separators, `.`/`..` and NUL are
+    refused, so the new folder always lands directly inside the folder the
+    user is looking at. An existing name is refused rather than silently
+    reused, so the user knows they picked a folder that was already there.
+    Messages are Arabic because they go straight to the picker.
+    """
+    parent = os.path.abspath(os.path.expanduser(parent.strip())) if parent and parent.strip() else ""
+    name = (name or "").strip()
+
+    if not parent or not os.path.isdir(parent):
+        raise ValueError("المجلد اللي إنت فيه مش موجود")
+    if not name:
+        raise ValueError("اكتب اسم للمجلد")
+    if name in (".", "..") or "/" in name or "\\" in name or "\0" in name:
+        raise ValueError("اسم المجلد مينفعش يكون فيه / أو يبقى . أو ..")
+    if len(name.encode("utf-8")) > 255:
+        raise ValueError("اسم المجلد طويل أوي")
+    if not os.access(parent, os.W_OK):
+        raise ValueError("مفيش صلاحية كتابة في المجلد ده")
+
+    path = os.path.join(parent, name)
+    if os.path.exists(path):
+        raise ValueError(f"فيه مجلد أو ملف اسمه «{name}» هنا بالفعل")
+    try:
+        os.mkdir(path)
+    except OSError as e:
+        raise ValueError(f"معرفناش نعمل المجلد: {e.strerror or e}")
+    return path
+
+
 def build_shortcuts(default_dir: str) -> list:
     """Quick-jump locations offered by the folder picker."""
     home = os.path.expanduser("~")

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
-import { useDirectoryListing } from '@/hooks/use-directory-browser';
+import { useCreateDirectory, useDirectoryListing } from '@/hooks/use-directory-browser';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,8 @@ import {
   HelpCircle,
   Check,
   AlertTriangle,
+  FolderPlus,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -49,6 +51,9 @@ export function OutputPathPicker({ restoreSaved = true, label }: OutputPathPicke
   const [manualPath, setManualPath] = useState('');
 
   const { data: listing, isLoading, error } = useDirectoryListing(browsePath, isOpen);
+  const createDirectory = useCreateDirectory();
+  // `null` while the "new folder" row is closed.
+  const [newFolderName, setNewFolderName] = useState<string | null>(null);
 
   // Restore the last chosen folder across sessions
   useEffect(() => {
@@ -82,9 +87,28 @@ export function OutputPathPicker({ restoreSaved = true, label }: OutputPathPicke
   };
 
   const handleOpen = () => {
+    setNewFolderName(null);
     setBrowsePath(outputDir || undefined);
     setManualPath(outputDir);
     setIsOpen(true);
+  };
+
+  // Made inside the folder being shown, then opened, so "اختيار المجلد"
+  // right after picks the new one.
+  const handleCreateFolder = () => {
+    const name = newFolderName?.trim();
+    if (!name || !listing?.path) return;
+    createDirectory.mutate(
+      { parent: listing.path, name },
+      {
+        onSuccess: ({ path }) => {
+          setNewFolderName(null);
+          setBrowsePath(path);
+          toast.success('اتعمل المجلد', { description: path });
+        },
+        onError: (err: Error) => toast.error(err.message),
+      },
+    );
   };
 
   const handleConfirm = (path: string) => {
@@ -207,7 +231,68 @@ export function OutputPathPicker({ restoreSaved = true, label }: OutputPathPicke
               {currentPath || '…'}
             </span>
             {isLoading && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 gap-1 px-2 text-[11px] cursor-pointer"
+              disabled={!listing?.writable || !!error || newFolderName !== null}
+              title={listing && !listing.writable ? 'مفيش صلاحية كتابة في المجلد ده' : undefined}
+              onClick={() => setNewFolderName('')}
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+              مجلد جديد
+            </Button>
           </div>
+
+          {newFolderName !== null && (
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                // React bubbles submit through the portal to the studio's own
+                // <form>, which would start a generation.
+                e.preventDefault();
+                e.stopPropagation();
+                handleCreateFolder();
+              }}
+            >
+              <FolderPlus className="h-4 w-4 shrink-0 text-primary" />
+              <Input
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    // Close the row, not the whole picker.
+                    e.stopPropagation();
+                    setNewFolderName(null);
+                  }
+                }}
+                placeholder="اسم المجلد الجديد"
+                aria-label="اسم المجلد الجديد"
+                className="h-9 text-sm"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                className="shrink-0 cursor-pointer"
+                disabled={!newFolderName.trim() || createDirectory.isPending}
+              >
+                {createDirectory.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                إنشاء
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 cursor-pointer"
+                aria-label="إلغاء"
+                onClick={() => setNewFolderName(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </form>
+          )}
 
           {/* Directory list */}
           <div className="h-48 overflow-y-auto rounded-lg border bg-background/60 p-1">

@@ -248,6 +248,22 @@ export async function browseDirectories(path?: string): Promise<DirectoryListing
 }
 
 /**
+ * Create a folder inside `parent`, for the save-location picker. The engine's
+ * message is Arabic and meant for the user, so it is surfaced as-is.
+ */
+export async function createDirectory(parent: string, name: string): Promise<{ path: string }> {
+  const formData = new UndiciFormData();
+  formData.append('parent', parent);
+  formData.append('name', name);
+  const response = await engineFetch('/api/fs/mkdir', { method: 'POST', body: formData });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(body?.detail || `HTTP ${response.status}`);
+  }
+  return (await response.json()) as { path: string };
+}
+
+/**
  * Check whether a typed-in save folder exists and is writable.
  */
 export async function validateDirectory(path: string): Promise<DirectoryValidation> {

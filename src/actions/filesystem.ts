@@ -1,6 +1,6 @@
 'use server';
 
-import { browseDirectories, validateDirectory } from '@/lib/tts-client';
+import { browseDirectories, createDirectory, validateDirectory } from '@/lib/tts-client';
 
 /**
  * List the sub-directories of a path so the control board can pick a save location.
@@ -24,5 +24,17 @@ export async function checkDirectory(path: string) {
     return { success: true as const, data };
   } catch (error: any) {
     return { success: false as const, error: error.message || 'تعذر التحقق من المسار' };
+  }
+}
+
+/**
+ * Create a new folder inside the one the picker is showing.
+ */
+export async function makeDirectory(parent: string, name: string) {
+  try {
+    const data = await createDirectory(parent, name);
+    return { success: true as const, data };
+  } catch (error: any) {
+    return { success: false as const, error: error.message || 'معرفناش نعمل المجلد' };
   }
 }

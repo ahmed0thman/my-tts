@@ -31,6 +31,7 @@ from audio_utils import (
     merge_clips,
     safe_export_name,
     list_directories,
+    create_directory,
     build_shortcuts,
 )
 
@@ -345,6 +346,15 @@ async def browse_filesystem(path: Optional[str] = None, show_hidden: bool = Fals
     result["shortcuts"] = build_shortcuts(AUDIO_DIR)
     result["default_dir"] = AUDIO_DIR
     return result
+
+@app.post("/api/fs/mkdir")
+async def make_directory(parent: str = Form(...), name: str = Form(...)):
+    """Creates a folder inside `parent`, for the save-location picker's "new folder"."""
+    try:
+        path = create_directory(parent, name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"path": path}
 
 @app.get("/api/fs/validate")
 async def validate_directory(path: str):

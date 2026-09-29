@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { listDirectories, checkDirectory } from '@/actions/filesystem';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listDirectories, checkDirectory, makeDirectory } from '@/actions/filesystem';
 
 /**
  * Browse the sub-directories of `path`. Pass `enabled: false` to hold off
@@ -35,5 +35,20 @@ export function useDirectoryCheck(path: string, enabled = true) {
     enabled: enabled && !!path,
     staleTime: 10_000,
     retry: false,
+  });
+}
+
+/**
+ * Create a folder, then refresh the listing it appears in.
+ */
+export function useCreateDirectory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { parent: string; name: string }) => {
+      const result = await makeDirectory(input.parent, input.name);
+      if (!result.success) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['directory-listing'] }),
   });
 }
