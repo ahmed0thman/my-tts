@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePresets, useCreatePreset, useDeletePreset } from '@/hooks/use-presets';
+import { useConfirm } from '@/providers/confirm-provider';
 import { useModels, defaultParamsFor } from '@/hooks/use-models';
 import { PageHeader } from '@/components/layout/page-header';
 import { ParamSliders } from '@/components/generation/param-sliders';
@@ -59,6 +60,7 @@ export default function PresetsPage() {
   const { data: modelsData, isLoading: isLoadingModels } = useModels();
   const { mutate: createPreset, isPending: isCreating } = useCreatePreset();
   const { mutate: deletePreset } = useDeletePreset();
+  const confirm = useConfirm();
 
   const models = useMemo(() => modelsData?.models ?? [], [modelsData]);
   const [modelId, setModelId] = useState<string>(DEFAULT_MODEL_ID);
@@ -133,8 +135,8 @@ export default function PresetsPage() {
     );
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذا الإعداد؟')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'تمسح الإعداد ده؟', confirmLabel: 'امسح', destructive: true })) {
       deletePreset(id);
     }
   };

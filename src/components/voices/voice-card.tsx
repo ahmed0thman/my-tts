@@ -7,6 +7,7 @@ import {
   useUpdateVoiceProfile,
 } from '@/hooks/use-voice-profiles';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/providers/confirm-provider';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -25,6 +26,7 @@ import { toast } from 'sonner';
 
 export function VoiceCard({ profile }: { profile: any }) {
   const { mutate: deleteProfile, isPending: isDeletePending } = useDeleteVoiceProfile();
+  const confirm = useConfirm();
   const { mutate: setDefault, isPending: isDefaultPending } = useSetDefaultVoiceProfile();
   const { mutate: updateProfile, isPending: isUpdatePending } = useUpdateVoiceProfile();
 
@@ -66,8 +68,8 @@ export function VoiceCard({ profile }: { profile: any }) {
     );
   };
 
-  const handleDelete = () => {
-    if (confirm('هل أنت متأكد من حذف هذا الصوت؟')) {
+  const handleDelete = async () => {
+    if (await confirm({ title: `تمسح الصوت "${profile.name}"؟`, confirmLabel: 'امسح', destructive: true })) {
       deleteProfile(profile.id, {
         onSuccess: () => toast.success('تم حذف الصوت بنجاح'),
         onError: () => toast.error('حدث خطأ أثناء الحذف'),

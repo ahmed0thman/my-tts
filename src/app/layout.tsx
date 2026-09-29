@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 import QueryProvider from '@/providers/query-provider';
+import { ConfirmProvider } from '@/providers/confirm-provider';
 // Trigger CSS reload
 import './globals.css';
 
@@ -20,7 +21,7 @@ export default function RootLayout({
       <body>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <QueryProvider>
-            {children}
+            <ConfirmProvider>{children}</ConfirmProvider>
             <Toaster richColors position="top-center" dir="rtl" />
           </QueryProvider>
         </ThemeProvider>

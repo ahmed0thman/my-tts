@@ -8,6 +8,7 @@ import { ProjectDialog } from '@/components/projects/project-dialog';
 import { EpisodeDialog } from '@/components/projects/episode-dialog';
 import { AudioPlayer } from '@/components/generation/audio-player';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/providers/confirm-provider';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { episodeKindLabel, EPISODE_KINDS } from '@/lib/projects';
@@ -48,6 +49,7 @@ export default function ProjectPage() {
 function ProjectOverview({ project }: { project: ProjectDetail }) {
   const router = useRouter();
   const deleteProject = useDeleteProject();
+  const confirm = useConfirm();
   const episodes = project.episodes;
 
   const counts = EPISODE_KINDS.map((kind) => ({
@@ -56,11 +58,11 @@ function ProjectOverview({ project }: { project: ProjectDetail }) {
   })).filter((k) => k.count > 0);
   const finishedSeconds = episodes.reduce((sum, e) => sum + (e.mergedDuration ?? 0), 0);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const warning = episodes.length
       ? `تمسح مشروع "${project.title}" بكل حلقاته (${episodes.length})؟ النسخ المصدّرة في مجلداتك مش هتتمسح.`
       : `تمسح مشروع "${project.title}"؟`;
-    if (!confirm(warning)) return;
+    if (!(await confirm({ title: warning, confirmLabel: 'امسح', destructive: true }))) return;
     deleteProject.mutate(project.id, { onSuccess: () => router.push('/projects') });
   };
 
