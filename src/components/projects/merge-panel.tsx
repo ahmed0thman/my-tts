@@ -1,9 +1,11 @@
 'use client';
 
-import { AlertTriangle, Combine, FolderCheck, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, AudioWaveform, Combine, FolderCheck, Loader2 } from 'lucide-react';
 import { AudioPlayer } from '@/components/generation/audio-player';
 import { OutputPathPicker } from '@/components/generation/output-path-picker';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/providers/confirm-provider';
 import { Badge } from '@/components/ui/badge';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -32,6 +34,7 @@ interface MergePanelProps {
 }
 
 export function MergePanel({ episode, gapMs, onGapChange, isBusy, isMerging, onMerge, restoreSaved }: MergePanelProps) {
+  const confirm = useConfirm();
   const segments = episode.segments;
   const ready = segments.filter((s) => s.status === 'COMPLETED' && s.audioPath).length;
   const allReady = segments.length > 0 && ready === segments.length;
@@ -85,7 +88,24 @@ export function MergePanel({ episode, gapMs, onGapChange, isBusy, isMerging, onM
       </TooltipProvider>
 
       <div className="space-y-2">
-        <Button className="w-full" disabled={!allReady || isBusy || isMerging} onClick={onMerge}>
+        <Button
+          className="w-full"
+          disabled={!allReady || isBusy || isMerging}
+          onClick={async () => {
+            // A re-merge rebuilds the file from the segments.
+            if (
+              episode.mergedEditedAt &&
+              !(await confirm({
+                title: 'تمسح تعديلات المحرر؟',
+                description: 'الملف المدموج متعدّل في محرر الصوت. الدمج من جديد هيبنيه من المقاطع ويمسح التعديلات دي.',
+                confirmLabel: 'ادمج من جديد',
+                destructive: true,
+              }))
+            )
+              return;
+            onMerge();
+          }}
+        >
           {isMerging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Combine className="h-4 w-4" />}
           {hasMerge ? 'ادمج من جديد' : 'ادمج المقاطع'}
           {allReady && (
@@ -116,6 +136,19 @@ export function MergePanel({ episode, gapMs, onGapChange, isBusy, isMerging, onM
             )}
           </div>
           <AudioPlayer src={`/api/audio/${episode.mergedAudioPath}`} compact />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {episode.mergedEditedAt ? (
+              <Badge variant="accent">متعدّل في المحرر</Badge>
+            ) : (
+              <span />
+            )}
+            <Button asChild variant="outline" size="sm" className={isBusy || isMerging ? 'pointer-events-none opacity-45' : ''}>
+              <Link href={`/editor?episode=${episode.id}`}>
+                <AudioWaveform className="h-3.5 w-3.5" />
+                تعديل في المحرر
+              </Link>
+            </Button>
+          </div>
           {episode.mergedSavedPath && (
             <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
               <FolderCheck className="h-3.5 w-3.5 shrink-0 text-success" />

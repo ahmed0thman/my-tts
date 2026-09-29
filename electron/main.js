@@ -182,6 +182,21 @@ function createMainWindow() {
     }
   });
 
+  // The audio editor blocks unload while it has unsaved edits. A browser asks
+  // the user itself; Electron just cancels the close silently, so the window
+  // would seem to ignore Cmd+W / Cmd+Q. Ask, as a sheet on the window.
+  mainWindow.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'warning',
+      message: 'فيه تعديلات مش محفوظة في محرر الصوت',
+      detail: 'لو قفلت دلوقتي التعديلات دي هتضيع.',
+      buttons: ['اقفل من غير حفظ', 'ارجع للمحرر'],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    if (choice === 0) event.preventDefault();
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });

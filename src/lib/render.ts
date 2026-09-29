@@ -153,6 +153,8 @@ export async function renderGeneration(
         duration: result.duration,
         fileSize: result.file_size,
         error: null,
+        // A fresh take has no hand edits.
+        editedAt: null,
       },
       include: { voiceProfile: true },
     });

@@ -9,11 +9,20 @@ import { cn } from "@/lib/utils"
  * Radix reads direction from the ambient `dir`, so the fill grows from the
  * correct side in RTL automatically. `min-w-0` keeps the root from forcing
  * its flex parent wider than the card it sits in.
+ *
+ * `origin` is for a bipolar control (a gain of -20..+20 dB): the fill runs
+ * from that value to the thumb, either way, and a tick marks it — filling
+ * from the minimum would draw "0 dB" as half full. LTR sliders only.
  */
 const Slider = React.forwardRef<
   React.ElementRef<typeof SliderPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root> & { origin?: number }
+>(({ className, origin, ...props }, ref) => {
+  const min = props.min ?? 0
+  const max = props.max ?? 100
+  const value = (props.value ?? props.defaultValue ?? [min])[0]
+  const pct = (v: number) => ((v - min) / (max - min)) * 100
+  return (
   <SliderPrimitive.Root
     ref={ref}
     className={cn(
@@ -23,8 +32,22 @@ const Slider = React.forwardRef<
     {...props}
   >
     <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-secondary">
-      <SliderPrimitive.Range className="absolute h-full rounded-full bg-primary" />
+      {origin === undefined ? (
+        <SliderPrimitive.Range className="absolute h-full rounded-full bg-primary" />
+      ) : (
+        <span
+          className="absolute h-full rounded-full bg-primary"
+          style={{ left: `${Math.min(pct(origin), pct(value))}%`, width: `${Math.abs(pct(value) - pct(origin))}%` }}
+        />
+      )}
     </SliderPrimitive.Track>
+    {origin !== undefined && (
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 h-3 w-px -translate-y-1/2 bg-muted-foreground/60"
+        style={{ left: `${pct(origin)}%` }}
+      />
+    )}
 
     <SliderPrimitive.Thumb
       className={cn(
@@ -36,7 +59,8 @@ const Slider = React.forwardRef<
       )}
     />
   </SliderPrimitive.Root>
-))
+  )
+})
 Slider.displayName = SliderPrimitive.Root.displayName
 
 export { Slider }

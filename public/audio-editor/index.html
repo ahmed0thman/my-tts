@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+	<title>Sawtak Audio Editor</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- AudioMass (MIT) — vendored for Sawtak, see SAWTAK.md. -->
+	<link rel="stylesheet" type="text/css" href="main.css">
+	<link rel="stylesheet" type="text/css" href="sawtak-theme.css">
+	<script>
+		// Skip AudioMass's first-run welcome modal; the host opens the editor
+		// with a file already on its way.
+		try { localStorage.setItem ('k', 1); } catch (e) {}
+	</script>
+</head>
+<body>
+	<div id="app"></div>
+
+	<script src="dist/wavesurfer.js"></script>
+	<script src="dist/plugin/wavesurfer.regions.js"></script>
+	<script src="oneup.js"></script>
+
+	<script src="app.js"></script>
+	<script src="keys.js"></script>
+	<script src="markers.js"></script>
+	<script src="contextmenu.js"></script>
+	<script src="lufs.js"></script>
+	<script src="ui-fx.js"></script>
+	<script src="ui.js"></script>
+	<script src="modal.js"></script>
+	<script src="state.js"></script>
+	<script src="engine.js"></script>
+	<script src="actions.js"></script>
+	<script src="drag.js"></script>
+	<script src="recorder.js"></script>
+
+	<script src="welcome.js"></script>
+	<script src="fx-pg-eq.js"></script>
+	<script src="fx-auto.js"></script>
+	<script src="local.js"></script>
+	<script src="id3.js"></script>
+	<script src="lzma.js"></script>
+	<script src="amss-format.js"></script>
+	<script src="multitrack.js"></script>
+	<script>
+		var editor = PKAudioEditor.init ('app');
+	</script>
+	<script src="sawtak-voice.js"></script>
+	<script src="sawtak-bridge.js"></script>
+	<script src="sawtak-db-axis.js"></script>
+</body>
+</html>

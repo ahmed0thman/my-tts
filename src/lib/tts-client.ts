@@ -413,3 +413,38 @@ export async function mergeAudio(params: {
   }
   return (await response.json()) as MergeAudioResult;
 }
+
+export interface ImportAudioResult {
+  audio_path: string;
+  /** Absolute path of the exported copy (episodes only; the canonical file otherwise). */
+  saved_path: string;
+  duration: number;
+  sample_rate: number;
+  file_size: number;
+}
+
+/**
+ * Store audio edited in the app's editor. The engine brings it back to the
+ * app's format (mono, 24 kHz) and writes it under a new name — float32 like a
+ * generated clip for a segment, 16-bit like a merge for an episode.
+ */
+export async function importAudio(params: {
+  file: Blob;
+  kind: 'segment' | 'episode';
+  outputDir?: string;
+  filenameHint?: string;
+}): Promise<ImportAudioResult> {
+  const formData = new UndiciFormData();
+  formData.append('file', params.file, 'edit.wav');
+  formData.append('kind', params.kind);
+  if (params.outputDir) formData.append('output_dir', params.outputDir);
+  if (params.filenameHint) formData.append('filename_hint', params.filenameHint);
+
+  // A long episode takes a while to resample; not model-bound, but past the
+  // default timeouts.
+  const response = await engineFetch('/api/import-audio', { method: 'POST', body: formData, long: true });
+  if (!response.ok) {
+    throw await engineError(response, 'Failed to import edited audio');
+  }
+  return (await response.json()) as ImportAudioResult;
+}

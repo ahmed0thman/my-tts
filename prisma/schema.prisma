@@ -56,6 +56,9 @@ model Generation {
   // Slot in the episode's running order. Starts as creation order; a retake
   // renders into the same row so it keeps its slot, and moving swaps slots.
   position        Int?
+  // Set when the take was changed in the audio editor. Regenerating replaces
+  // the take and clears it, so the UI can warn before hand edits are lost.
+  editedAt        DateTime?
 
   @@index([createdAt(sort: Desc)])
   @@index([voiceProfileId])
@@ -102,6 +105,9 @@ model Episode {
   mergedDuration  Float?
   mergedAt        DateTime?
   mergedSignature String?
+  // Set when the merged file was changed in the audio editor. A re-merge
+  // rebuilds it from the segments and clears it, discarding those edits.
+  mergedEditedAt  DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   segments        Generation[]

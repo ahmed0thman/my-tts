@@ -197,6 +197,25 @@ def _resolve_generated_clip(stored: str) -> str:
     return path
 
 
+def _export_copy(filepath: str, target_dir: str, filename_hint: Optional[str]) -> str:
+    """Copy a finished file into the user's chosen folder, named after its title.
+
+    The canonical copy stays in storage/audio for playback; the export never
+    overwrites a file the user already has there. Returns where it landed —
+    the canonical path itself when no folder was chosen.
+    """
+    if os.path.abspath(target_dir) == os.path.abspath(AUDIO_DIR):
+        return filepath
+    stem = safe_export_name(filename_hint)
+    saved_path = os.path.join(target_dir, f"{stem}.wav")
+    suffix = 2
+    while os.path.exists(saved_path):
+        saved_path = os.path.join(target_dir, f"{stem} ({suffix}).wav")
+        suffix += 1
+    shutil.copy2(filepath, saved_path)
+    return saved_path
+
+
 @app.post("/api/merge")
 async def merge_audio(
     paths: str = Form(...),
@@ -234,18 +253,7 @@ async def merge_audio(
         filepath = os.path.join(AUDIO_DIR, filename)
         torchaudio.save(filepath, wav, rate, encoding="PCM_S", bits_per_sample=16)
 
-        # The canonical copy stays in storage/audio for playback; a chosen
-        # folder gets a copy named after the project, never overwriting one
-        # the user already has there.
-        saved_path = filepath
-        if os.path.abspath(target_dir) != os.path.abspath(AUDIO_DIR):
-            stem = safe_export_name(filename_hint)
-            saved_path = os.path.join(target_dir, f"{stem}.wav")
-            suffix = 2
-            while os.path.exists(saved_path):
-                saved_path = os.path.join(target_dir, f"{stem} ({suffix}).wav")
-                suffix += 1
-            shutil.copy2(filepath, saved_path)
+        saved_path = _export_copy(filepath, target_dir, filename_hint)
 
         return {
             "audio_path": f"/storage/audio/{filename}",
@@ -261,6 +269,85 @@ async def merge_audio(
     except Exception as e:
         logger.error(f"Error during merge: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+#: Every generated clip is 24 kHz mono; an edited file is brought back to that
+#: so segments stay interchangeable with freshly generated ones when merged.
+EDIT_SAMPLE_RATE = 24000
+
+
+@app.post("/api/import-audio")
+async def import_audio(
+    file: UploadFile = File(...),
+    kind: str = Form("segment"),
+    output_dir: Optional[str] = Form(None),
+    filename_hint: Optional[str] = Form(None),
+):
+    """Store audio edited in the app's editor as a new file.
+
+    The editor (AudioMass) decodes at the browser's rate, usually 44.1 kHz,
+    and exports float32 WAV. This brings it back to the app's format — mono,
+    24 kHz — and writes it under a new name; the caller swaps the database row
+    over and deletes the old file only once that has succeeded.
+
+    `kind` decides the format, matching what the file replaces: a segment is
+    stored like a generated clip (float32 `gen_*.wav`), an episode like a merge
+    (16-bit `merged_*.wav`, plus a copy in the chosen export folder).
+    """
+    if kind not in ("segment", "episode"):
+        raise HTTPException(status_code=400, detail="kind must be 'segment' or 'episode'")
+    try:
+        target_dir = resolve_output_dir(output_dir, AUDIO_DIR) if kind == "episode" else AUDIO_DIR
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    upload_path = os.path.join(AUDIO_DIR, generate_unique_filename("upload", ".wav"))
+    await save_uploaded_file(file, upload_path)
+
+    def render():
+        try:
+            wav, rate = torchaudio.load(upload_path)
+        except Exception as e:
+            raise ValueError(f"Not a readable WAV file: {e}")
+        if wav.shape[0] > 1:
+            wav = wav.mean(dim=0, keepdim=True)
+        if rate != EDIT_SAMPLE_RATE:
+            wav = torchaudio.functional.resample(wav, rate, EDIT_SAMPLE_RATE)
+        if wav.shape[-1] == 0:
+            raise ValueError("The edited audio is empty")
+        wav, _, _ = normalize_peak(wav)
+
+        if kind == "segment":
+            filename = generate_unique_filename("gen", ".wav")
+            filepath = os.path.join(AUDIO_DIR, filename)
+            torchaudio.save(filepath, wav, EDIT_SAMPLE_RATE)
+            saved_path = filepath
+        else:
+            filename = generate_unique_filename("merged", ".wav")
+            filepath = os.path.join(AUDIO_DIR, filename)
+            torchaudio.save(filepath, wav, EDIT_SAMPLE_RATE, encoding="PCM_S", bits_per_sample=16)
+            saved_path = _export_copy(filepath, target_dir, filename_hint)
+
+        return {
+            "audio_path": f"/storage/audio/{filename}",
+            "saved_path": saved_path,
+            "duration": wav.shape[-1] / EDIT_SAMPLE_RATE,
+            "sample_rate": EDIT_SAMPLE_RATE,
+            "file_size": os.path.getsize(filepath),
+        }
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, render)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error importing edited audio: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            os.remove(upload_path)
+        except OSError:
+            pass
 
 
 def _reference_cap() -> float:
