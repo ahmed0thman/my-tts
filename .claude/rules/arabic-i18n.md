@@ -35,11 +35,15 @@
   - "Record your voice": `سجّل صوتك`
   - "Guidance scale" (VoiceTut adherence to the reference): `الالتزام بالعينة`
   - "Diffusion steps" (VoiceTut): `خطوات التوليد`
+  - "Breath reduction" (VoiceTut): `تخفيض النفَس`
   - "Project": `مشروع` / "Projects": `المشاريع`
   - "Episode": `حلقة` (kinds: `حلقة` / `شورت` / `صوت تاني`)
   - "Segment": `مقطع`
   - "Merge": `دمج` ("Merge the segments": `دمج المقاطع`)
   - "Retake": `إعادة التوليد`
+  - "Clip library": `مكتبة المقاطع` ("Add audio" to an episode: `إضافة صوت`)
+  - "Dubbing": `الدبلجة` ("Transcribe": `فرّغ الكلام`, "Paste the translation": `الصق الترجمة`, "Put the audio on the video": `ركّب الصوت على الفيديو`, a line: `سطر`)
+  - "Audio editor": `محرر الصوت` ("Edit audio": `تعديل الصوت`). The editor's own UI (AudioMass) stays English.
 
 ## Model & Dialect Labels
 - Dialect names come from the engine (`describe()` / `describe_instance()`), not the frontend, so they stay consistent between the API and the UI: `فصحى / MSA`, `سعودي / نجدي`, `مصري`.

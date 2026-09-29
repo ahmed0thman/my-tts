@@ -33,9 +33,43 @@ audio, of kind `episode` / `short` / `other`. An episode has its own remembered
 voice settings and an ordered list of **segments** (`Generation` rows with
 `episodeId` + `position`). Paste a script, split it by line or paragraph, queue
 it, render it one segment at a time, review and retake any segment in place,
-reorder, then merge into one WAV via the engine's `POST /api/merge`. A new
-episode copies the voice of the project's most recently edited one. Details in
+reorder, then merge into one WAV via the engine's `POST /api/merge`. Order is drag and drop. A segment can also be audio no model made — an upload,
+a recording, or a copy of a clip from the **clip library** (`/library`) —
+added with «إضافة صوت» at any slot. Each
+segment keeps its own voice (multi-speaker episodes); the episode's voice is
+only what new segments get. A new episode copies the voice of the project's most recently edited one. Details in
 `.claude/rules/architecture.md` → Projects.
+
+## Dubbing (الدبلجة)
+`/dubbing` puts a new voice on a finished video. Upload a video (`POST /api/dubs`,
+streamed to `storage/videos/`) → **transcribe** it into timed lines (engine
+`/api/dub/transcribe`, Whisper large-v3-turbo — already cached for VoiceTut) →
+optionally **paste a translation** line for line (the user translates elsewhere:
+«انسخ النص» / «الصق الترجمة»; the count must match) → render each line with
+VoiceTut **fitted to its slot** (`targetDuration` / `maxDuration`) → **assemble**
+(`/api/dub/assemble`): each take placed at its line's start on a track exactly
+as long as the video, sped up (≤1.35×, pitch kept) or trimmed if it still runs
+into the next line, then muxed in place of the original audio (video stream
+copied). **There is deliberately no translation model** — the user declined a
+local LLM download; do not add one without asking. VoiceTut speaks Egyptian
+and English only, so those are the dub languages. Lines are `Generation` rows
+with `dubId` (plus `startMs`/`endMs`/`sourceText`); details in
+`.claude/rules/architecture.md` → Dubbing.
+
+## Audio Editor
+`/editor?segment=<id>` or `/editor?episode=<id>` opens a take or a merged file
+in [AudioMass](https://github.com/pkalogiros/AudioMass) (MIT), vendored under
+`public/audio-editor/` and hosted in a same-origin iframe
+(`src/components/editor/audio-editor-frame.tsx`). The app's theme tokens are
+mapped onto AudioMass's CSS variables, so it follows dark/light and the palette.
+Saving exports mono float32 WAV → `POST /api/edits` (a Route Handler: episodes
+exceed the Server Action body limit) → engine `POST /api/import-audio`
+(back to 24 kHz mono) → the row is switched to the new file and the old one
+deleted. `Generation.editedAt` / `Episode.mergedEditedAt` mark hand edits, and
+regenerate / re-merge confirm before discarding them. «تحسين احترافي» applies a
+voice-over polish chain (`public/audio-editor/sawtak-voice.js`: denoise, breath
+gate, tone EQ, de-ess, compression, −19 LUFS) as one undoable step. Patches to the vendored
+code are listed in `public/audio-editor/SAWTAK.md`.
 
 ## Desktop App (standalone)
 The installed `Sawtak.app` is self-contained and **never touches the repo**:
@@ -66,7 +100,7 @@ All five models clone zero-shot from a reference clip, and they differ:
 - **SILMA** needs the clip **plus its transcription** (`ref_text`), and silently truncates references over **8.05s** — a truncated clip makes it discard `ref_text` and re-transcribe with Whisper (a 1.6GB download).
 - **NAMAA (both)** clone from audio alone; `referenceText` is ignored and there is no length cap.
 - **Masri Higgs clones, but unstably.** It takes the clip **plus its transcription** and uses the first **6 s** (150 frames at 25 Hz), exactly as the model's own serving script does. The checkpoint is a LoRA merge over 98 h of a *single* narrator, so it pulls toward his timbre and the reference wins only some of the time; the model card says cloning is "inherited from Higgs v3" but was never re-benchmarked after the fine-tune. Take-to-take drift is large — two takes sharing one reference came out 26 Hz apart in median F0 — so **a single A/B sample cannot tell you whether a reference landed.** Judge it across several takes, and lower `temperature`/`topK` to trade variety for adherence.
-- **VoiceTut is the one to reach for when the goal is the user's own voice.** It needs the clip **plus its transcription**, and the **3–10 s** window is enforced, not advisory — over it the model recites the reference instead of reading the text (measured: a 16.2 s reference opened with the reference's own words and lost the prompt's first sentence in both of two takes; the same voice cut to 8.9 s was verbatim). The recorder hard-stops at 10 s, `/api/upload-reference` rejects longer clips, `createGeneration` refuses a stored profile over the cap, and the engine raises before inference. It wants **3–10 s**: confirmed by ear here, a 9 s cut of a 23 s clip reproduced the speaker's delivery where the full clip reproduced only the timbre, and it generated ~35% faster (RTF 2.51x vs 3.88x). The library warns above 20 s. It does *not* truncate when `ref_text` is supplied — deliberately, so audio and transcript stay aligned — so an over-long clip is used whole and quality suffers silently. With no `ref_text` it transcribes the clip with Whisper large-v3-turbo (1.6 GB), the same trap SILMA has.
+- **VoiceTut is the one to reach for when the goal is the user's own voice.** It needs the clip **plus its transcription**, and the **3–10 s** window is enforced, not advisory — over it the model recites the reference instead of reading the text (measured: a 16.2 s reference opened with the reference's own words and lost the prompt's first sentence in both of two takes; the same voice cut to 8.9 s was verbatim). The recorder hard-stops at 10 s, `/api/upload-reference` rejects longer clips, `createGeneration` refuses a stored profile over the cap, and the engine raises before inference. It wants **3–10 s**: confirmed by ear here, a 9 s cut of a 23 s clip reproduced the speaker's delivery where the full clip reproduced only the timbre, and it generated ~35% faster (RTF 2.51x vs 3.88x). The library warns above 20 s. It does *not* truncate when `ref_text` is supplied — deliberately, so audio and transcript stay aligned — so an over-long clip is used whole and quality suffers silently. With no `ref_text` it transcribes the clip with Whisper large-v3-turbo (1.6 GB), the same trap SILMA has. Its `breathReduction` knob (default 20 dB) feeds it a breath-free copy of the reference and turns the output's breaths down (`tts-engine/breath.py`) — audible breath 0.50 s → 0.04 s per take.
 - `VoiceProfile.referenceText` is stored either way; `createGeneration` enforces it only when the selected model declares `requiresReferenceText`.
 - The record-your-voice flow fills it in automatically (the user reads a known script, `src/lib/reference-script.ts`); the upload flow asks for it.
 
