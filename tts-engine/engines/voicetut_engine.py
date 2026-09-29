@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 import progress
+from breath import breath_free_reference, reduce_breaths
 
 from .base import TTSEngine
 
@@ -62,6 +63,10 @@ _ELLIPSIS_MASK = "\u0001"
 #: ordinary sentence join just needs to not sound butt-joined; and leaving two
 #: or more blank lines buys a deliberate beat — the pause before a punchline or
 #: a rhetorical question, which one paragraph break is too short to carry.
+#: dB taken off breaths in the output. 20 keeps a faint, human breath you
+#: would only notice on headphones; 40 removes them.
+DEFAULT_BREATH_REDUCTION = 20.0
+
 GAP_SENTENCE = 0.12
 GAP_PARAGRAPH = 0.38
 GAP_BEAT = 0.95
@@ -220,6 +225,11 @@ class VoiceTutEngine(TTSEngine):
         reference_text: Optional[str],
         params: Dict[str, Any],
     ) -> Tuple[torch.Tensor, int, Optional[str]]:
+        # Not a model knob: applied to the output (breath.py). VoiceTut
+        # breathes like the podcasters it learned from, audibly, at the start
+        # of most phrases; there is no model control for it.
+        breath_reduction = float(params.get("breathReduction", DEFAULT_BREATH_REDUCTION))
+
         overrides = {
             "guidance_scale": float(params.get("guidanceScale", 2.0)),
             "speed": float(params.get("speed", 1.0)),
@@ -229,7 +239,10 @@ class VoiceTutEngine(TTSEngine):
         kwargs: Dict[str, Any] = {}
         if reference_audio and os.path.exists(reference_audio):
             self._check_reference_length(reference_audio)
-            kwargs["ref_audio"] = reference_audio
+            # The model copies the reference's breathing; a breath-free copy
+            # cuts it to about a quarter (breath.py). Off with the knob at 0,
+            # which means "exactly as the model makes it".
+            kwargs["ref_audio"] = breath_free_reference(reference_audio) if breath_reduction > 0 else reference_audio
             # Supplying the transcript is not just for quality: with `ref_text`
             # absent the library transcribes the clip with Whisper
             # large-v3-turbo, a 1.6 GB download, exactly as SILMA does.
@@ -267,6 +280,9 @@ class VoiceTutEngine(TTSEngine):
 
         progress.tracker.set_chunk(len(chunks))
         tensor = torch.from_numpy(np.concatenate(pieces)).float().squeeze()
+        if breath_reduction > 0:
+            tensor, breath_seconds = reduce_breaths(tensor, SAMPLE_RATE, breath_reduction)
+            logger.info(f"  breaths: {breath_seconds:.2f}s turned down {breath_reduction:.0f} dB")
         logger.info(f"  -> {tensor.shape[-1] / SAMPLE_RATE:.1f}s of audio")
         return tensor, SAMPLE_RATE, None
 
@@ -326,5 +342,15 @@ class VoiceTutEngine(TTSEngine):
                 {"key": "guidanceScale", "label": "الالتزام بالعينة", "min": 1.0, "max": 5.0, "step": 0.1, "default": 2.0},
                 {"key": "speed", "label": "سرعة الإلقاء", "min": 0.5, "max": 2.0, "step": 0.05, "default": 1.0},
                 {"key": "numStep", "label": "خطوات التوليد", "min": 8, "max": 64, "step": 1, "default": 32, "integer": True},
+                {
+                    "key": "breathReduction",
+                    "label": "تخفيض النفَس",
+                    "min": 0,
+                    "max": 40,
+                    "step": 1,
+                    "default": DEFAULT_BREATH_REDUCTION,
+                    "integer": True,
+                    "format": " dB",
+                },
             ],
         }
