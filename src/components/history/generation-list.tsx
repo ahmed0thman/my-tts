@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { useGenerations, useDeleteGeneration, useRetryGeneration } from '@/hooks/use-generations';
+import { useGenerations, useDeleteGeneration, useDeleteGenerations, useRetryGeneration } from '@/hooks/use-generations';
 import { useVoiceProfiles } from '@/hooks/use-voice-profiles';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/providers/confirm-provider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AudioPlayer } from '@/components/generation/audio-player';
-import { formatDate, normalizeStatus, STATUS_LABELS } from '@/lib/utils';
-import { RefreshCw, Trash2, Download, SearchX, AlertTriangle } from 'lucide-react';
+import { cn, formatDate, normalizeStatus, STATUS_LABELS } from '@/lib/utils';
+import { RefreshCw, Trash2, Download, SearchX, AlertTriangle, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const MODEL_LABELS: Record<string, string> = {
@@ -20,6 +22,7 @@ const MODEL_LABELS: Record<string, string> = {
   'namaa-egyptian': 'NAMAA — مصري',
   'masri-higgs': 'Masri Higgs — مصري',
   voicetut: 'VoiceTut — مصري',
+  imported: 'صوت متضاف',
 };
 
 const PARAM_LABELS: Record<string, string> = {
@@ -32,12 +35,17 @@ const PARAM_LABELS: Record<string, string> = {
   topK: 'الاحتمالات',
   guidanceScale: 'الالتزام',
   numStep: 'الخطوات',
+  breathReduction: 'النفَس',
 };
 
 export function GenerationList() {
   const [page, setPage] = useState(1);
   const [voiceProfileId, setVoiceProfileId] = useState<string>('all');
   const [status, setStatus] = useState<string>('all');
+  // Ids, not rows, so a selection survives paging. It is cleared when a filter
+  // changes, since the rows it named are no longer on screen to review.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data, isLoading } = useGenerations({
     page,
@@ -50,10 +58,12 @@ export function GenerationList() {
 
   const { data: profiles } = useVoiceProfiles();
   const { mutate: deleteGen, isPending: isDeleting } = useDeleteGeneration();
+  const { mutate: deleteMany, isPending: isDeletingMany } = useDeleteGenerations();
+  const confirm = useConfirm();
   const { mutate: retryGen, isPending: isRetrying } = useRetryGeneration();
 
-  const handleDelete = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'تمسح التسجيل ده من السجل؟', confirmLabel: 'امسح', destructive: true })) {
       deleteGen(id, { onSuccess: () => toast.success('تم الحذف بنجاح') });
     }
   };
@@ -79,6 +89,64 @@ export function GenerationList() {
     }
   };
 
+  const toggle = (id: string, on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const clearSelection = () => setSelected(new Set());
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selected);
+    const ok = await confirm({
+      title: `تمسح ${ids.length} تسجيل من السجل؟`,
+      description: 'الملفات الصوتية هتتمسح كمان، ومش هينفع ترجعها.',
+      confirmLabel: 'امسح',
+      destructive: true,
+    });
+    if (!ok) return;
+    deleteMany(ids, { onSuccess: clearSelection });
+  };
+
+  const handleExportSelected = async () => {
+    const ids = Array.from(selected);
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(
+          response.status === 404
+            ? 'مفيش تسجيلات مكتملة في اللي اخترته'
+            : response.status === 413
+              ? 'الاختيار كبير قوي — قسّمه على أكتر من مرة'
+              : (body?.error ?? 'حدث خطأ أثناء التصدير'),
+        );
+      }
+      const url = window.URL.createObjectURL(await response.blob());
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `sawtak-clips-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('تم تجهيز الملف المضغوط');
+    } catch (error: any) {
+      toast.error(error.message || 'حدث خطأ أثناء التصدير');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const StatusBadge = ({ value }: { value: string }) => {
     const s = normalizeStatus(value);
     const variant =
@@ -87,6 +155,9 @@ export function GenerationList() {
   };
 
   const totalPages = data?.totalPages ?? 1;
+  const pageIds: string[] = data?.items?.map((g: any) => g.id) ?? [];
+  const selectedOnPage = pageIds.filter((id) => selected.has(id)).length;
+  const allOnPageSelected = pageIds.length > 0 && selectedOnPage === pageIds.length;
 
   return (
     <div className="space-y-6">
@@ -99,6 +170,7 @@ export function GenerationList() {
             onValueChange={(val) => {
               setVoiceProfileId(val);
               setPage(1);
+              clearSelection();
             }}
           >
             <SelectTrigger dir="rtl">
@@ -123,6 +195,7 @@ export function GenerationList() {
             onValueChange={(val) => {
               setStatus(val);
               setPage(1);
+              clearSelection();
             }}
           >
             <SelectTrigger dir="rtl">
@@ -138,6 +211,65 @@ export function GenerationList() {
           </Select>
         </div>
       </div>
+
+      {!!data?.items?.length && (
+        <div
+          className={cn(
+            'sticky top-2 z-10 flex flex-wrap items-center gap-3 rounded-2xl border bg-card px-4 py-2.5 transition-colors',
+            selected.size ? 'border-primary/40 shadow-sm' : 'border-border',
+          )}
+        >
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
+            <Checkbox
+              checked={allOnPageSelected ? true : selectedOnPage ? 'indeterminate' : false}
+              onCheckedChange={(on) => {
+                setSelected((prev) => {
+                  const next = new Set(prev);
+                  for (const id of pageIds) {
+                    if (on === true) next.add(id);
+                    else next.delete(id);
+                  }
+                  return next;
+                });
+              }}
+              aria-label="تحديد كل تسجيلات الصفحة"
+            />
+            {selected.size ? (
+              <span>
+                اتحدد <span className="numeric text-primary">{selected.size}</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">تحديد الكل</span>
+            )}
+          </label>
+
+          {selected.size > 0 && (
+            <div className="ms-auto flex flex-wrap items-center gap-1.5">
+              <Button variant="outline" size="sm" onClick={handleExportSelected} disabled={isExporting}>
+                {isExporting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                {selected.size > 1 ? 'تحميل (ZIP)' : 'تحميل'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                onClick={handleDeleteSelected}
+                disabled={isDeletingMany}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                حذف
+              </Button>
+              <Button variant="ghost" size="sm" onClick={clearSelection} aria-label="إلغاء التحديد">
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-4">
@@ -163,15 +295,28 @@ export function GenerationList() {
         <div className="space-y-4">
           {data.items.map((gen: any, i: number) => {
             const s = normalizeStatus(gen.status);
+            const isSelected = selected.has(gen.id);
             return (
               <article
                 key={gen.id}
-                className="animate-rise flex flex-col gap-5 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-border-strong lg:flex-row"
+                className={cn(
+                  'animate-rise flex flex-col gap-5 rounded-2xl border p-5 transition-colors lg:flex-row',
+                  isSelected
+                    ? 'border-primary/50 bg-primary/5'
+                    : 'border-border bg-card hover:border-border-strong',
+                )}
                 style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
               >
                 <div className="min-w-0 flex-1 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <StatusBadge value={gen.status} />
+                    <div className="flex items-center gap-2.5">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(on) => toggle(gen.id, on === true)}
+                        aria-label="تحديد التسجيل"
+                      />
+                      <StatusBadge value={gen.status} />
+                    </div>
                     <span className="bidi-isolate text-[11px] text-muted-foreground">
                       {formatDate(gen.createdAt)}
                     </span>

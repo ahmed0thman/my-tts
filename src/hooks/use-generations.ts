@@ -7,6 +7,7 @@ import {
   getGeneration,
   createGeneration,
   deleteGeneration,
+  deleteGenerations,
   retryGeneration,
   getGenerationStats
 } from '@/actions/generation';
@@ -89,6 +90,26 @@ export function useDeleteGeneration() {
       if (context?.previousGenerations) {
         queryClient.setQueryData(['generations'], context.previousGenerations);
       }
+      toast.error(`فشل المسح: ${error.message}`);
+    },
+  });
+}
+
+export function useDeleteGenerations() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const result = await deleteGenerations(ids);
+      if (!result.success) throw new Error(result.error);
+      return result.data!;
+    },
+    onSuccess: ({ deleted }) => {
+      queryClient.invalidateQueries({ queryKey: ['generations'] });
+      queryClient.invalidateQueries({ queryKey: ['generation-stats'] });
+      toast.success(`اتمسح ${deleted} تسجيل`);
+    },
+    onError: (error: Error) => {
       toast.error(`فشل المسح: ${error.message}`);
     },
   });

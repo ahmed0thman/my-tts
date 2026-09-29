@@ -157,6 +157,24 @@ export async function deleteGeneration(id: string) {
   }
 }
 
+/** Delete several history rows and their audio files in one go. */
+export async function deleteGenerations(ids: string[]): Promise<{ success: boolean; data?: { deleted: number }; error?: string }> {
+  try {
+    const rows = await prisma.generation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, audioPath: true },
+    });
+
+    for (const row of rows) await deleteStoredAudio(row.audioPath);
+    const { count } = await prisma.generation.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+
+    revalidatePath('/');
+    return { success: true, data: { deleted: count } };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function retryGeneration(id: string): Promise<RenderResult> {
   try {
     const original = await prisma.generation.findUnique({
