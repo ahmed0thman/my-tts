@@ -59,6 +59,11 @@ model Generation {
   // Set when the take was changed in the audio editor. Regenerating replaces
   // the take and clears it, so the UI can warn before hand edits are lost.
   editedAt        DateTime?
+  // Where the audio came from: `tts` (rendered by a model) or, for an episode
+  // segment the user brought in, `upload` / `recording` / `library` (a copy of
+  // a saved Clip). Only `tts` rows can be rendered again; the rest keep their
+  // audio until edited in the editor or deleted, and `text` is their label.
+  source          String           @default("tts")
 
   @@index([createdAt(sort: Desc)])
   @@index([voiceProfileId])
@@ -113,6 +118,22 @@ model Episode {
   segments        Generation[]
 
   @@index([projectId, createdAt])
+}
+
+/// A saved piece of audio to reuse across episodes — an intro, a sign-off,
+/// a recording of the user's own voice. Inserting one into an episode copies
+/// the file, so deleting the segment or the clip never affects the other.
+model Clip {
+  id        String   @id @default(cuid())
+  name      String
+  audioPath String   // `/storage/clips/clip_*.wav`, mono 24 kHz
+  duration  Float
+  fileSize  Int?
+  source    String   @default("upload")  // upload | recording | segment
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt(sort: Desc)])
 }
 
 model Preset {

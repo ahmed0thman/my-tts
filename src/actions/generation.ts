@@ -72,7 +72,9 @@ export async function getGenerations(params: { page?: number; pageSize?: number;
   try {
     const { page = 1, pageSize = 10, voiceProfileId, status } = params;
 
-    const where: any = {};
+    // The generation log: what a model rendered. Uploads and recordings added
+    // to episodes live in their episode and the clip library.
+    const where: any = { source: 'tts' };
     if (voiceProfileId) where.voiceProfileId = voiceProfileId;
     if (status) where.status = status;
 
@@ -173,11 +175,11 @@ export async function retryGeneration(id: string): Promise<RenderResult> {
 export async function getGenerationStats() {
   try {
     const [total, completed, failed, aggregations] = await Promise.all([
-      prisma.generation.count(),
-      prisma.generation.count({ where: { status: 'COMPLETED' } }),
-      prisma.generation.count({ where: { status: 'FAILED' } }),
+      prisma.generation.count({ where: { source: 'tts' } }),
+      prisma.generation.count({ where: { source: 'tts', status: 'COMPLETED' } }),
+      prisma.generation.count({ where: { source: 'tts', status: 'FAILED' } }),
       prisma.generation.aggregate({
-        where: { status: 'COMPLETED' },
+        where: { source: 'tts', status: 'COMPLETED' },
         _sum: {
           duration: true,
         },

@@ -148,6 +148,36 @@ export async function processRecording(blob: Blob, fileName = 'recording.wav'): 
   };
 }
 
+/**
+ * Any audio the browser can decode (WAV, MP3, M4A, a MediaRecorder blob) as a
+ * mono 24 kHz WAV, for a segment or a library clip. Unlike a voice reference
+ * there is no length cap. A recording is trimmed and normalized like a
+ * reference; an uploaded file is kept as its author made it (an outro's
+ * silence and level are deliberate).
+ */
+export async function processAudioFile(
+  blob: Blob,
+  options: { trim?: boolean; normalize?: boolean; fileName?: string } = {},
+): Promise<ProcessedRecording> {
+  const rendered = await toMonoAtTargetRate(blob);
+  let samples: Float32Array = rendered.getChannelData(0);
+  if (options.trim) samples = trimSilence(samples, TARGET_SAMPLE_RATE);
+  let peak = 0;
+  if (options.normalize) {
+    ({ samples, peak } = normalize(samples));
+  } else {
+    for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+  }
+  const wav = encodeWav(samples, TARGET_SAMPLE_RATE);
+  return {
+    file: new File([wav], options.fileName ?? 'audio.wav', { type: 'audio/wav' }),
+    url: URL.createObjectURL(wav),
+    duration: samples.length / TARGET_SAMPLE_RATE,
+    sampleRate: TARGET_SAMPLE_RATE,
+    inputPeak: peak,
+  };
+}
+
 /** Picks a container the current browser can actually record. */
 export function pickRecorderMimeType(): string | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;

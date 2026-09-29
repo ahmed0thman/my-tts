@@ -72,3 +72,10 @@ export const mergeSchema = z.object({
   gapMs: z.coerce.number().int().min(0).max(5000),
   outputDir: z.string().optional(),
 });
+
+/** A saved clip's name, or the label of a segment the user brought in. */
+export const clipNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'الاسم مطلوب')
+  .max(120, 'الاسم يجب ألا يتجاوز 120 حرف');
